@@ -3,10 +3,13 @@
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [MongoDB Performance](#mongodb-performance)
-  - [Chapter 1](#chapter-1)
+  - [Chapter 1: Introduction](#chapter-1-introduction)
     - [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
     - [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
     - [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
+  - [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
+    - [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
+    - [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -14,7 +17,7 @@
 
 > My course notes from M201: MongoDB Performance at [MongoDB University](https://university.mongodb.com/)
 
-## Chapter 1
+## Chapter 1: Introduction
 
 ### Lecture: Hardware Considerations and Configurations Part 1
 
@@ -149,3 +152,57 @@ db.people.count({ "email" : {"$exists": 1} })
 ```
 
 Also install [Compass](https://www.mongodb.com/download-center#compass)
+
+## Chapter 2: MongoDB Indexes
+
+### Lecture: Introduction to Indexes
+
+Indexes trying to solve problem of slow queries.
+
+Example from physical world - book on interior design, trying to find section on bedspreads, could look page by page but that's slow. Faster go to back of book where index is - sorted alphabetically by keywrods with page number. Can quickly find which page the bedspreads section is on.
+
+Translating abvoe example to MongoDB, "Book" -> "Collection".
+
+*Collection Scan:* If not using an index when querying collection, db will have to examine every document. As collection grows in size, will have to search through more documents. This is `O(N)` - linear running time - run time of query is linearly proportional to number of documents `N` in collection.
+
+Index will improve performance:
+
+![index](images/index.png "index")
+
+Index limits search space - don't need to search every document, instead, search through ordered index.
+
+Index keeps reference to every document in collection. Index is list of key-value pairs:
+- key: value of field that has been indexed on
+- value: value of key is reference to document containing the key
+
+Index is associated with one or more fields (last_name in above example).
+
+When creating an index, must specify which fields from documents want to index on.
+
+`_id` field is automatically indexed.
+
+If a query isn't searching by `_id`, then the `_id` index won't be used.
+
+Can have many indexes on same collection.
+
+Index keys are stored in order. This means db doesn't need to look at every index entry to find the one being queried on.
+
+Index stored in B-tree, used to find target values with few comparisons:
+
+![btree](images/btree.png "btree")
+
+When new documents are inserted, each new insertion doesn't necessarily imply another comparison.
+
+In above example, if searching for value `15`, search wouldn't change if `5` gets inserted.
+
+![index docs](images/index-docs.png "index docs")
+
+**Index Overhead**
+
+Performance gain of using index has a cost - each additional index decreases write speed on collection. Every time new document insrted in collection, all the collection's indexes need to be updated.
+
+Also if document is updated or removed, some of the indexes (aka b-trees) may need to be rebalanced.
+
+Be careful when creating indexes - don't create unnecessarily because will affect insert/update/delete performance on that collection.
+
+### Lecture: How Data is Stored on Disk
