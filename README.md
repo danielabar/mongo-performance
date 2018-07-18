@@ -88,7 +88,7 @@ In above case, multiple cpu's won't help performance because this work cannot be
 
 MongoDB uses disk to persist data. IOPS: Input/Output operations per second provided by server. The faster this is, the faster mongo can read/write data. Type of disk will greatly affect MongoDB performance.
 
-![iops](images/vn-arch.png "iops")
+![iops](images/iops.png "iops")
 
 Disks can be used in different architectures such as RAID for redundancy of read and write operations.
 
