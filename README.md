@@ -10,6 +10,8 @@
   - [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
     - [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
     - [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
+    - [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
+    - [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -371,3 +373,261 @@ db.collection.insert({...}, {writeConcern: {w: 1, j: true}})
 ```
 
 Setting `j: true` will impact performance because mongo will wait until sync is done to disk before confirming the write has been acknowledged.
+
+### Lecture: Single Field Indexes Part 1
+
+Simplest index, foundation for later more complex indexes. Index that captures keys on a single field.
+
+```javascript
+db.<collection>.createIndex({ <field>: <direction> })
+```
+
+**Features**
+
+- Keys from only one field
+- Can find a single value for the indexed field
+- Can find a range of values
+- Can use dot notation to index fields in subdocuments
+- Can be used to find several distinct values in a single query
+
+Use container where `people.json` was loaded earlier and open mongo shell:
+
+```shell
+docker exec -it course-mongo bash
+mongo
+```
+
+Find a particular person by ssn, appending `explain` function to get more information about query execution:
+
+```javascript
+use m201
+db.people.find({"ssn": "720-38-5636"}).explain("executionStats")
+```
+
+Output:
+
+```
+{
+	"queryPlanner" : {
+		"plannerVersion" : 1,
+		"namespace" : "m201.people",
+		"indexFilterSet" : false,
+		"parsedQuery" : {
+			"ssn" : {
+				"$eq" : "720-38-5636"
+			}
+		},
+		"winningPlan" : {
+			"stage" : "COLLSCAN",
+			"filter" : {
+				"ssn" : {
+					"$eq" : "720-38-5636"
+				}
+			},
+			"direction" : "forward"
+		},
+		"rejectedPlans" : [ ]
+	},
+	"executionStats" : {
+		"executionSuccess" : true,
+		"nReturned" : 1,
+		"executionTimeMillis" : 59,
+		"totalKeysExamined" : 0,
+		"totalDocsExamined" : 50474,
+		"executionStages" : {
+			"stage" : "COLLSCAN",
+			"filter" : {
+				"ssn" : {
+					"$eq" : "720-38-5636"
+				}
+			},
+			"nReturned" : 1,
+			"executionTimeMillisEstimate" : 40,
+			"works" : 50476,
+			"advanced" : 1,
+			"needTime" : 50474,
+			"needYield" : 0,
+			"saveState" : 394,
+			"restoreState" : 394,
+			"isEOF" : 1,
+			"invalidates" : 0,
+			"direction" : "forward",
+			"docsExamined" : 50474
+		}
+	},
+	"serverInfo" : {
+		"host" : "4efd23485cb9",
+		"port" : 27017,
+		"version" : "4.0.0",
+		"gitVersion" : "3b07af3d4f471ae89e8186d33bbb1d5259597d51"
+	},
+	"ok" : 1
+}
+```
+
+Later in course, will go over output in more detail. For now, just care about a few fields:
+
+- `queryPlanner` indicates collection scanning will be used `COLLSCAN` - looking at EVERY document in collection.
+- `executionStats` indicates had to examine `50474` documents, which is number of documents in collection.
+- `executionStats` also indicates only `1` document returned.
+- `totalKeysExamined: 0` - looked at 0 index keys, i.e. no index used because we haven't created any yet.
+
+Bad ratio, inefficient query: 1 doc returned / 50474 examined.
+
+Create an index from mongo shell, on people collection, ssn field, 1 for ascending:
+
+```javascript
+db.people.createIndex({ssn: 1})
+```
+
+Running above command makes MongoDB build the index. To do so, it must look at every doc in collection, pulling out `ssn` field. If ssn field not present on a doc, key entry will have null value.
+
+Run query again with explain:
+
+```javascript
+exp = db.people.explain("executionStats")  // create explainable object
+exp.find({"ssn": "720-38-5636"}) // run find on explain object
+```
+
+Output:
+
+```
+{
+	"queryPlanner" : {
+		"plannerVersion" : 1,
+		"namespace" : "m201.people",
+		"indexFilterSet" : false,
+		"parsedQuery" : {
+			"ssn" : {
+				"$eq" : "720-38-5636"
+			}
+		},
+		"winningPlan" : {
+			"stage" : "FETCH",
+			"inputStage" : {
+				"stage" : "IXSCAN",
+				"keyPattern" : {
+					"ssn" : 1
+				},
+				"indexName" : "ssn_1",
+				"isMultiKey" : false,
+				"multiKeyPaths" : {
+					"ssn" : [ ]
+				},
+				"isUnique" : false,
+				"isSparse" : false,
+				"isPartial" : false,
+				"indexVersion" : 2,
+				"direction" : "forward",
+				"indexBounds" : {
+					"ssn" : [
+						"[\"720-38-5636\", \"720-38-5636\"]"
+					]
+				}
+			}
+		},
+		"rejectedPlans" : [ ]
+	},
+	"executionStats" : {
+		"executionSuccess" : true,
+		"nReturned" : 1,
+		"executionTimeMillis" : 0,
+		"totalKeysExamined" : 1,
+		"totalDocsExamined" : 1,
+		"executionStages" : {
+			"stage" : "FETCH",
+			"nReturned" : 1,
+			"executionTimeMillisEstimate" : 0,
+			"works" : 2,
+			"advanced" : 1,
+			"needTime" : 0,
+			"needYield" : 0,
+			"saveState" : 0,
+			"restoreState" : 0,
+			"isEOF" : 1,
+			"invalidates" : 0,
+			"docsExamined" : 1,
+			"alreadyHasObj" : 0,
+			"inputStage" : {
+				"stage" : "IXSCAN",
+				"nReturned" : 1,
+				"executionTimeMillisEstimate" : 0,
+				"works" : 2,
+				"advanced" : 1,
+				"needTime" : 0,
+				"needYield" : 0,
+				"saveState" : 0,
+				"restoreState" : 0,
+				"isEOF" : 1,
+				"invalidates" : 0,
+				"keyPattern" : {
+					"ssn" : 1
+				},
+				"indexName" : "ssn_1",
+				"isMultiKey" : false,
+				"multiKeyPaths" : {
+					"ssn" : [ ]
+				},
+				"isUnique" : false,
+				"isSparse" : false,
+				"isPartial" : false,
+				"indexVersion" : 2,
+				"direction" : "forward",
+				"indexBounds" : {
+					"ssn" : [
+						"[\"720-38-5636\", \"720-38-5636\"]"
+					]
+				},
+				"keysExamined" : 1,
+				"seeks" : 1,
+				"dupsTested" : 0,
+				"dupsDropped" : 0,
+				"seenInvalidated" : 0
+			}
+		}
+	},
+	"serverInfo" : {
+		"host" : "4efd23485cb9",
+		"port" : 27017,
+		"version" : "4.0.0",
+		"gitVersion" : "3b07af3d4f471ae89e8186d33bbb1d5259597d51"
+	},
+	"ok" : 1
+}
+```
+
+This time, query is more efficient:
+- `winningPlan` is index scan `IXSCAN`.
+- `executionStatus` has one doc returned as before: `nReturned: 1`
+- but only had to look at one doc: `totalDocsExamined: 1`
+- index keys were used: `totalKeysExamined: 1`
+
+If query predicate doesn't use a field that is indexed, then will still have collection scan:
+
+```javascript
+exp.find({last_name: "Acevedo"})
+```
+
+In this case had to examine all 50K docs to return the 10 that match query predicate.
+
+**Dot Notation**
+
+MongoDB allows dot notation to query inside subdocument. Can also use dot notation when specifying indexes.
+
+Example, insert a docs with subdocs into examples collection:
+
+```javascript
+db.examples.insertOne({_id: 0, subdoc: {indexedField: "value", otherField: "value"}})
+db.examples.insertOne({_id: 1, subdoc: {indexedField: "wrongValue", otherField: "value"}})
+```
+
+Specify index on subdoc using dot notation, then use it in a query and verify index is being used.
+
+```javascript
+db.examples.createIndex({"subdoc.indexedField": 1})
+db.examples.explain("executionStats").find({"subdoc.indexedField": "value"})
+```
+
+NEVER index on field that points to a subdocument, `subdoc` field in above example, would have to query on entire subdocument to make use of index.
+
+### Lecture: Single Field Indexes Part 2
