@@ -12,6 +12,8 @@
     - [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
     - [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
     - [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
+    - [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
+      - [Methods for sorting](#methods-for-sorting)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -694,3 +696,16 @@ exp.find({"ssn": {$in: ["001-29-9184", "177-45-0950", "265-67-9973"]}, last_name
 
 If query is querying by 2 or more fields where only one of those fields is indexed on (i.e. single key index), db will filter using index, and then look only at filtered docs to `FETCH` the ones that match the other predicates.
 Compound indexes can make this even more efficient (later in course).
+
+### Lecture: Sorting with Indexes
+
+Indexes can also be used to sort documents in query. Any query can also be sorted:
+
+```javascript
+db.people.find({first_name: "James"}).sort({first_name: 1})
+```
+
+#### Methods for sorting
+
+- In memory
+- Using an index
