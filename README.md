@@ -631,3 +631,66 @@ db.examples.explain("executionStats").find({"subdoc.indexedField": "value"})
 NEVER index on field that points to a subdocument, `subdoc` field in above example, would have to query on entire subdocument to make use of index.
 
 ### Lecture: Single Field Indexes Part 2
+
+**Range**
+
+```javascript
+exp.find({ssn: {$gte: "555-00-0000", $lt: "556-00-0000"}})
+```
+
+Since ssn is indexed, index will be used for this query. Only had to examine 49 docs to return 49 docs:
+
+```javascript
+"executionStats" : {
+  "executionSuccess" : true,
+  "nReturned" : 49,
+  "executionTimeMillis" : 0,
+  "totalKeysExamined" : 49,
+  "totalDocsExamined" : 49,
+  ...
+```
+
+**Set**
+
+```javascript
+exp.find({"ssn": {$in: ["001-29-9184", "177-45-0950", "265-67-9973"]}})
+```
+
+Index is still used. Only had to examine 3 docs to find the 3 docs matching this query:
+
+```javascript
+"executionStats" : {
+  "executionSuccess" : true,
+  "nReturned" : 3,
+  "executionTimeMillis" : 0,
+  "totalKeysExamined" : 6,
+  "totalDocsExamined" : 3,
+```
+
+Note 6 index keys examined, might have expected 3. Due to search algorithm overshooting values being searched for.
+
+Can also specify multiple fields in query, index will still be used even if not all fields are indexed:
+
+```javascript
+exp.find({"ssn": {$in: ["001-29-9184", "177-45-0950", "265-67-9973"]}, last_name: {$gte: "H"}})
+```
+
+`winningPlan` shows index scan is used to filter down documents matching `ssn`. Then from those results (3 docs), they are further filtered by `last_name` predicate.
+
+```javascript
+"winningPlan" : {
+  "stage" : "FETCH",
+  "filter" : {
+    "last_name" : {
+      "$gte" : "H"
+    }
+  },
+  "inputStage" : {
+    "stage" : "IXSCAN",
+    "keyPattern" : {
+      "ssn" : 1
+    },
+```
+
+If query is querying by 2 or more fields where only one of those fields is indexed on (i.e. single key index), db will filter using index, and then look only at filtered docs to `FETCH` the ones that match the other predicates.
+Compound indexes can make this even more efficient (later in course).
