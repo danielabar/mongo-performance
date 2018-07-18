@@ -206,3 +206,168 @@ Also if document is updated or removed, some of the indexes (aka b-trees) may ne
 Be careful when creating indexes - don't create unnecessarily because will affect insert/update/delete performance on that collection.
 
 ### Lecture: How Data is Stored on Disk
+
+Databases persist data using the server's file system.
+
+![disk](images/disk.png "disk")
+
+The way mongo stores data on disk differs depending on storage engine supported by MongoDB. Particular details of how each storage engine works are out of scope of this course. But high level review of how each organizes data.
+
+MongoDB supports creating several different data management objects:
+
+```javascript
+db.collection.insert({_id: 1})
+```
+
+![data management objects](images/data-mgmt-objects.png "data management objects")
+
+**Database**
+
+![database](images/database.png "database")
+
+- Databases are logical groups of collections.
+- Collections are operational units that group documents together.
+- Indexes on collections over fields present in documents.
+- Documents - atomic units of information used by applications.
+
+**dbpath dir**
+
+Looking at contents of `dbpath` directory, for example, can specify path at mongod startup (this one is default):
+
+```shell
+mongod --dbpath /ata/db --fork --logpath /data/db/mongodb.log # start
+mongo admin --eval 'db.shutdownServer()'                      # stop
+```
+
+Or using Docker:
+
+```shell
+docker start course-mongo
+docker exec -it course-mongo bash
+cd /data/db
+ls -l
+```
+
+Files:
+
+```
+WiredTiger                           diagnostic.data
+WiredTiger.lock                      index-1-5808622382818253038.wt
+WiredTiger.turtle                    index-3-5808622382818253038.wt
+WiredTiger.wt                        index-5-5808622382818253038.wt
+WiredTigerLAS.wt                     index-6-5808622382818253038.wt
+_mdb_catalog.wt                      index-8-5808622382818253038.wt
+collection-0-5808622382818253038.wt  journal
+collection-2-5808622382818253038.wt  mongod.lock
+collection-4-5808622382818253038.wt  sizeStorer.wt
+collection-7-5808622382818253038.wt  storage.bson
+```
+
+For each collection and index, WiredTiger storage engine writes an individual `.wt` file.
+
+Catalog file contains catalog of all collections and indexes that mongod contains.
+
+![catalog](images/catalog.png "catalog")
+
+Above is simple flat file organization. Can also have more elaborate structure. Startup mongo with `directoryperdb` instruction:
+
+```shell
+docker run \
+  -p 27019:27017 \
+  --name experiment-mongo \
+  -d mongo:4.0.0 --directoryperdb
+docker exec -it experiment-mongo bash
+mongo hello --eval 'db.a.insert({a:1}, {writeConcern: {w: 1, j:true}})' # write a doc to new db `hello`, collection `a`
+ls /data/db
+```
+
+This time directory listing is organized differently:
+
+```
+WiredTiger       WiredTiger.turtle  WiredTigerLAS.wt  admin   diagnostic.data  journal  mongod.lock    storage.bson
+WiredTiger.lock  WiredTiger.wt      _mdb_catalog.wt   config  hello            local    sizeStorer.wt
+```
+
+Note 3 new folders due to having specified `directoryperdb` at startup, creates one folder per database:
+- admin: default database created by MongoDB
+- local: default database created by MongoDB
+- hello: newly created database from our insert instruction
+
+Looking inside folder of newly created db:
+
+```shell
+ls /data/db/hello
+collection-7-1343607420274581578.wt  index-8-1343607420274581578.wt
+```
+
+Contains one collection file and one index file (always get _id index).
+
+With WiredTiger storage engine, can go a little further with disk organization. Remove previous container and start again but with `wiredTigerDirectoryForIndexes` instruction:
+
+```shell
+docker stop experiment-mongo
+docker rm -f experiment-mongo
+docker run \
+  -p 27019:27017 \
+  --name experiment-mongo \
+  -d mongo:4.0.0 --directoryperdb --wiredTigerDirectoryForIndexes
+docker exec -it experiment-mongo bash
+mongo hello --eval 'db.a.insert({a:1}, {writeConcern: {w: 1, j:true}})'
+ls /data/db # still get one directory per db
+ls /data/db/hello # collection index
+```
+
+This time have a directory `collection` and directory `index`:
+
+```shell
+ls /data/db/hello/collection/
+7--6924425517033069288.wt
+ls /data/db/hello/index/
+8--6924425517033069288.wt
+```
+
+**What does this have to do with performance?**
+
+![data index disk](images/data-index-disk.png "data index disk")
+
+If have several different disks on server, organizing data as above allows great degree of IO parallelization.
+
+Mongo creates symbolic links to mount points on differnet physical drives.
+
+Every read and write to mongo will use two data structures - collections and indexes. Parallelization of IO improves overall throughput of persistency layer.
+
+**Compression**
+
+Mongo also offers compression for storing data on disk - instruct storage engine to store data on disk using compression algorithm.
+
+![compression](images/compression.png "compression")
+
+Compression improves performance by making each IO operation smaller, which will be faster, but cost more CPU cycles.
+
+Before writing data to disk, data is allocated in memory:
+
+![ram disk](images/ram-disk.png "ram-disk")
+
+All data in memory is eventually written to disk. This process triggerred by:
+- User/application specifies a particular write concern or forcing a sync operation, eg: `db.collection.insert({...}, {writeConcern: {w:3}})`
+- Checkpoint: periodic internal process that regulates how data should be flushed/synced into the data file (defined by sync periods).
+
+**Journaling**
+
+Essential component of persistence. Journal file acts as safeguard against data corruption caused by incopmlete file writes. eg: if system sufferes unexpected shutdown, data stored in journal is used to recover to a consistent and correct state.
+
+```shell
+ls /data/db/journal
+WiredTigerLog.0000000001      WiredTigerPreplog.0000000002
+WiredTigerPreplog.0000000001
+```
+
+Journal file structure includes individual write operations. To minimize performance impact of journalling, flushes performed with group commits in compressed format. Writes to journal are atomic to ensure consistency of journal files.
+
+App con force data to be synced to journal before acknowledging a write:
+
+```javascript
+db.collection.insert({...}, {writeConcern: {w: 1, j: true}})
+```
+
+Setting `j: true` will impact performance because mongo will wait until sync is done to disk before confirming the write has been acknowledged.
