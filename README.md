@@ -14,6 +14,8 @@
     - [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
     - [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
       - [Methods for sorting](#methods-for-sorting)
+      - [In-Memory Sorting](#in-memory-sorting)
+      - [Index Sorting](#index-sorting)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -707,5 +709,150 @@ db.people.find({first_name: "James"}).sort({first_name: 1})
 
 #### Methods for sorting
 
-- In memory
-- Using an index
+Any query can be sorted:
+
+```javascript
+db.people.find({firsr_name: "James"}).sort({first_name: 1})
+```
+
+#### In-Memory Sorting
+
+![sort ram](images/sort-ram.png "sort ram")
+
+- Documents are stored on disk in unknown order.
+- When queried, docs returned in whatever order server finds them, which is rarely what application wants.
+- To have docs sorted in particular order, server must read docs from disk into RAM, then perform sorting algorithm on docs in RAM.
+- With large number of docs, may be very slow.
+- Sorting large mumber of docs in memory is expensive operation -> server will abort in-memory sorting when 32MB of memory have been used.
+
+#### Index Sorting
+
+![sort index](images/sort-index.png "sort index")
+
+- Keys are ordered according to field specified at index creation.
+- Server can take advantage for sorting, if query is using index scan, order of docs returned is guaranteed to be sorted by the index keys -> i.e. no need to perform explicit sort as docs will be fetched from server in sorted order.
+- Note docs will only be ordered by fields that make up the index. eg: if index is on last_name ascending, docs will be ordered according to last_name ascending.
+- Query planner will use indexes that can be helpful in fulfilling query predicate OR query sort.
+
+Example, find docs sorted by social security number:
+
+```javascript
+db.people.find({}, {_id: 0, last_nane: 1, first_name: 1, ssn: 1}).sort({ssn: 1})
+```
+
+Returns first 20 docs from `people` collection, sorted by ssn.
+
+Create explainable object:
+
+```javascript
+var exp = db.people.explain('executionStats')
+exp.find({}, {_id: 0, last_nane: 1, first_name: 1, ssn: 1}).sort({ssn: 1})
+```
+
+Execution stats shows had to look at ~50K docs to return ~50k docs, notice also ~50K index keys examained:
+
+```
+"executionStats" : {
+	"nReturned" : 50474,
+	"totalKeysExamined" : 50474,
+	"totalDocsExamined" : 50474,
+	...
+```
+
+But input stage also shows index is used (recall earlier we ran `db.people.createIndex({ssn: 1})`):
+
+```
+"inputStage" : {
+	"stage" : "FETCH",
+	"inputStage" : {
+			"stage" : "IXSCAN",
+			"keyPattern" : {
+				"ssn" : 1
+			},
+			"indexName" : "ssn_1",
+			...
+```
+
+In this case index was not used for filtering docs, but for sorting.
+
+If sort by first_name, for which there is no index, note no index keys examed and collection scan used to read all docs into memory, then did in-memory sort.
+
+```javascript
+exp.find({}, {_id: 0, last_nane: 1, first_name: 1, ssn: 1}).sort({first_name: 1})
+```
+
+```
+"executionStats" : {
+	"nReturned" : 50474,
+	"totalKeysExamined" : 0,
+	"totalDocsExamined" : 50474,
+	...
+```
+
+```
+"inputStage" : {
+	"stage" : "COLLSCAN",
+	...
+```
+
+Now try sorting by `ssn` field (recall it has index) but descending:
+
+```javascript
+exp.find({}, {_id: 0, last_nane: 1, first_name: 1, ssn: 1}).sort({ssn: -1})
+```
+
+Will still use the index to sort, will walk index backwards instead of forwards:
+
+```
+"inputStage" : {
+	"stage" : "IXSCAN",
+	"nReturned" : 50474,
+	"direction" : "backward",
+	...
+```
+
+When sorting with single field index, can always sort docs ascending or descending, regardless of physical order of index keys.
+
+Can also filter and sort by indexed key, eg: find all people who's ssn starts with `555`, then sort by ssn desc:
+
+```javascript
+exp.find({ssn: /^555/}, {_id: 0, last_name: 1, first_name: 1, ssn: 1}).sort({ssn: -1})
+```
+
+In this case, index scan used for filtering AND sorting docs. Only had to look at 49 docs:
+
+```
+"executionStats" : {
+	"nReturned" : 49,
+	"totalKeysExamined" : 51,
+	"totalDocsExamined" : 49,
+	...
+```
+
+Repeat experiment with descending index keys:
+
+```javascript
+db.people.dropIndexes()
+db.people.createIndex({ssn: -1})
+```
+
+Now execute same query to search for ssn starting with 555 and sort descending
+
+```javascript
+exp.find({ssn: /^555/}, {_id: 0, last_name: 1, first_name: 1, ssn: 1}).sort({ssn: -1})
+```
+
+Now index walked forwards because index is descending and query sorts descending:
+
+```javascript
+"inputStage" : {
+	"stage" : "IXSCAN",
+	"keyPattern" : {
+		"ssn" : -1
+	},
+	"indexName" : "ssn_-1",
+	"direction" : "forward",
+	...
+```
+
+Concept of forwards/backwards index walking will be discussed later in topic on compound indexes.
