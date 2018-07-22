@@ -18,6 +18,8 @@
       - [Index Sorting](#index-sorting)
     - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
     - [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
+    - [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
+      - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -991,3 +993,84 @@ Adding first_name to search, will still use index prefix, but have to examine mo
 Querying by job, first_name, last_name - will have to examine a lot more index keys - 74, because there are 74 job = Jewellery designer and last_name = Cook.
 
 ![job first last](images/job-first-last.png "job first last")
+
+### Lecture: When you can sort with indexes
+
+Carrying on with people dataset and 4 key compound index (job, employer, last_name, first_name) from previous lecture.
+
+Compound indexes can be used to sort. Simplest is to use index key pattern as sort predictate, in example below, index is used for sorting:
+
+![compound index sort](images/compound-index-sort.png "compound index sort")
+
+But don't need to use all index keys to take advantage of compound index in sorting, eg: sort by job and employer, will still use compound index via index prefix to prevent in-memory sorting:
+
+![sort job employer](images/sort-job-employer.png "sort job employer")
+
+What if sort by employer first and then job? (recall compound index is on: job, employer, last_name, first_name) - this time will do collection scanning and in-memory sorting, because Mongo is unable to use an index prefix in this case:
+
+![sort employer job](images/sort-employer-job.png "sort employer job")
+
+Index will still be used for sorting, regardless of query predicate (eg: if query on email field even though there is no index on email), because server will try to avoid in-memory sorting. Eg - this willuse index:
+
+```javascript
+exp.find({email: "jenniferfreeman@hotmail.com"}).sort({job: 1})
+```
+
+In this case all 50K docs examined to return 1. Index is used for sorting, not filtering.
+
+Index can be used to both filter and sort docs if includes equality conditions on all prefix keys that precede sort keys. Eg below job, employer are index prefix of compound index and last_name continues that.
+
+```javascript
+exp.find({job: "Graphic designer", employer: "Wilson Ltd"}).sort({last_name: 1})
+```
+
+![filter job employer sort last](images/filter-job-employer-sort-last.png "filter job employer sort last")
+
+Example below - no longer able to use index for sorting, although it can for fitering:
+
+```javascript
+exp.find({job: "Graphic designer"}).sort({last_name: 1})
+```
+
+![filter job sort last](images/filter-job-sort-last.png "filter job sort last")
+
+#### Sort Direction with Multiple Fields
+
+Given the following index:
+
+```javascript
+db.coll.createIndex({a: 1, b: -1, c: 1})
+```
+
+Then this query will walk the index "forwards"
+
+```javascript
+db.coll.find({}).sort({a: 1, b: -1, c: 1})
+```
+
+To walk index backwards, invert each key:
+
+```javascript
+db.coll.find({}).sort({a: -1, b: 1, c: -1})
+```
+
+All queries below will use index for sorting:
+
+```javascript
+db.coll.find().sort({a: 1})					// walk index forwards - index prefix
+db.coll.find().sort({a: 1, b: -1})	// walk index forwards - iindex prefix
+db.coll.find().sort({a: -1}) 				// walk index backwards - inverse of index prefix
+db.coll.find().sort({a: -1, b: 1})	// walk index backwards - inverse of index prefix
+```
+
+Using our compound index example, following would use index because its inverse of prefix {job: 1, employer: 1}:
+
+```javascript
+exp.find().sort({job: -1, exployer: -1})
+```
+
+But this would do collection scan followed by in-memory sort:
+
+```javascript
+exp.find().sort({job: -1, exployer: 1})
+```
