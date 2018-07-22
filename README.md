@@ -20,6 +20,7 @@
     - [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
     - [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
       - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
+    - [Lecture: Multikey Indexes](#lecture-multikey-indexes)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1074,3 +1075,120 @@ But this would do collection scan followed by in-memory sort:
 ```javascript
 exp.find().sort({job: -1, exployer: 1})
 ```
+
+### Lecture: Multikey Indexes
+
+Arrays can be embedded in documents:
+
+```javascript
+{
+	_id: ObjectId("57..."),
+	productName: "Long sleeve t shirt",
+	categories: ["T-Shirts", "Clothing", "Apparel],
+	stock: [
+		{size: "S", color: "red", quantity: 25},
+		{size: "S", color: "blue", quantity: 10},
+		{size: "M", color: "blue", quantity: 50},
+	]
+}
+```
+
+Multikey index is an index on an array field, eg:
+
+```javascript
+db.products.createIndex({categories: 1})
+```
+
+For each entry in array, server will create separate index key. From eg above, would have 3 index entries all pointing to the same doc: T-Shirts, Clothing,and Apparel.
+
+In addition to indexing on scalar values such as strings, can also index on nested docs, eg:
+
+```javascript
+db.products.createIndex({"stock.quantity": 1})
+```
+
+Again, server would create 3 index keys, one for each of the sub-docs.
+
+**Limit**
+
+For each index document, can have at most one index field whose value is an array.
+
+With sample doc above, could have index on productName and stock.quantity, but could not have index on categories and stock.quantity, because that would create huge amount of index entries -> cartesian product between number of categories and number of stock entries.
+
+**Performance Advice**
+
+Take care when creating multikey indexes, ensure arrays don't grow too large, this causes index to get overly large, which then may not be able to load entirely in memory, forcing query to go to disk.
+
+Multikey indexes don't support covered queries.
+
+**Exercise**
+
+From mongo shell:
+
+```shell
+> use m201
+> db.products.insert({
+	productName: "MongoDB Short Sleeve T-Shirt",
+	categories: ["T-Shirts", "Clothing", "Apparel"],
+	stock: {size: "L", color: "green", quantity: 100}
+})
+> db.products.find().pretty()
+{
+	"_id" : ObjectId("5b551035246743ab8d457cf6"),
+	"productName" : "MongoDB Short Sleeve T-Shirt",
+	"categories" : [
+		"T-Shirts",
+		"Clothing",
+		"Apparel"
+	],
+	"stock" : {
+		"size" : "L",
+		"color" : "green",
+		"quantity" : 100
+	}
+}
+> db.products.createIndex({"stock.quantity": 1})
+> var exp = db.products.explain()
+> exp.find({"stock.quantity": 100})
+```
+
+Index is used, but multikey is false because `stock` is not an array.
+
+```javascript
+"winningPlan" : {
+	"stage" : "FETCH",
+	"inputStage" : {
+		"stage" : "IXSCAN",
+		"keyPattern" : {
+			"stock.quantity" : 1
+		},
+		"indexName" : "stock.quantity_1",
+		"isMultiKey" : false,
+```
+
+Now insert a document where `stock` field is an array instead of embedded doc, then run query again:
+
+```shell
+> db.products.insert({
+		productName: "Long sleeve t shirt",
+		categories: ["T-Shirts", "Clothing", "Apparel"],
+		stock: [
+			{size: "S", color: "red", quantity: 25},
+			{size: "S", color: "blue", quantity: 10},
+			{size: "M", color: "blue", quantity: 50},
+		]
+	});
+> exp.find({"stock.quantity": 100})
+```
+
+Still doing index scan,but this time, multikey is true, because `stock` is an array field in one of the documents.
+
+```javascript
+"isMultiKey" : true,
+"multiKeyPaths" : {
+	"stock.quantity" : [
+		"stock"
+	]
+},
+```
+
