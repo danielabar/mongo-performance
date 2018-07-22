@@ -17,6 +17,7 @@
       - [In-Memory Sorting](#in-memory-sorting)
       - [Index Sorting](#index-sorting)
     - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
+    - [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -925,3 +926,68 @@ Compound indexes can also be used to find range of values:
 This time examined 16 docs, 16 index keys, to return 16 docs -> still optimal ratio 16/16 = 1.
 
 Reason we didn't have to examine any extra docs is because first_name field is also ordered in compound index.
+
+### Lecture: Querying on Compound Indexes Part 2
+
+**Index Prefixes**
+
+Continuous subset of compound index that starts on the left. Eg, compound index:
+
+```javascript
+{"item": 1, "location": 1, "stock": 1}
+```
+
+Index prefixes for above are:
+
+```javascript
+{"item": 1}
+{"item": 1, "location": 1}
+```
+
+location,stock, or just stock are NOT prefixes because not continuous starting from left.
+
+Given existence of compound index, Mongo can use any of its index prefixes, just like regular index. Query planner will ignore unused parts of index to the right that are not needed for query.
+
+Consider simple example of last_name, first_name compound index:
+
+![compass index listing](images/compass-index-listing.png "compass index listing")
+
+Index prefix is {last_name: 1}. So a query searching by last name will use it:
+
+![compass explain prefix](images/compass-explain-prefix.png "compass explain prefix")
+
+Examined 22 docs to return 22. Shows compound index used but really it was the prefix.
+
+Now try query on first_name:
+
+![compass explain no prefix](images/compass-explain-no-prefix.png "compass explain no prefix")
+
+No index used, had to examine all 50K docs to return 8 docs. Was not able to use index because no first_name index prefix exists for the compound index last_name, first_name.
+
+Last names are ordered in index, first names also have an ordering, but only *relative* to last name.
+
+![index prefix](images/index-prefix.png "index prefix")
+
+**Performance Advice**
+
+*If application has two queries, and one uses fields that are subset of the other, build an index where one query uses index prefix and other query uses all fields of (compound) index.*
+
+i.e. do not build two separate indexes when one will suffice.
+
+Better example - compound index on multiple fields:
+
+![compass compound index 4](images/compass-compound-index-4.png "compass compound index 4")
+
+Query on job abd employer - will use index prefix of compound index:
+
+![job employer](images/job-employer.png "job employer")
+
+Index prefix will also be used if add last_name to query because that follows order from left of compound index.
+
+Adding first_name to search, will still use index prefix, but have to examine more keys (6) than docs returned (1). Had to scan through all docs matching on job and employer (6) to find the one that has fist_name: Sara: i.e. only could use two of the 4 fields in compound index.
+
+![job employer first](images/job-employer-first.png "job employer first")
+
+Querying by job, first_name, last_name - will have to examine a lot more index keys - 74, because there are 74 job = Jewellery designer and last_name = Cook.
+
+![job first last](images/job-first-last.png "job first last")
