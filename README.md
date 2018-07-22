@@ -16,6 +16,7 @@
       - [Methods for sorting](#methods-for-sorting)
       - [In-Memory Sorting](#in-memory-sorting)
       - [Index Sorting](#index-sorting)
+    - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -856,3 +857,71 @@ Now index walked forwards because index is descending and query sorts descending
 ```
 
 Concept of forwards/backwards index walking will be discussed later in topic on compound indexes.
+
+### Lecture Querying on Compound Indexes Part 1
+
+Index on two or more fields, supports queries on those fields.
+
+Structure of compound index, recall index is B-tree, which has order. Order is flat. Therefore compound index is one dimensional.
+
+![compound index](images/compound-index.png "compoudnd index")
+
+Index keys === ordered list.
+
+Even though there are two fields, index is one dimensional.
+
+Eg: To find person doc for `Adam Bailey`, would check one index key for last_name: Bailey and first_name: Bailey, and that index key points to matching doc.
+
+Even though there are two fields in index, only checking one thing.
+
+**Real-world analogy**
+
+Phone book has index - ordered keys by last name ascending, first name ascending. eg: To find `Chris Bailey`, go to `Bailey` section of phone book, then go down through the `Bailey`'s until find `Chris`.
+
+To find all people with last name `Bailey`'s -> easy because all grouped together in index. But to find all people with first name `James` -> difficult, have to go through every index entry (key) or every single document.
+
+Fields that are defined first in a compound index are more useful than fields that come later.
+
+**Compass Exercise**
+
+Connect to localhost:27019, select `m201`, then `people`, then `Explain Plan`. Enter query:
+
+```javascript
+{ "last_name": "Frazier", "first_name": "Jasmine" }
+```
+
+![compass explain](images/compass-explain.png "compass explain")
+
+Visual explain shows docs examined, docs returned, how long, whether index keys used (0 in this case).
+
+Use Indexes tab of Compass UI to create ascending index on last_name:
+
+![compass create index](images/compass-create-index.png "compass create index")
+
+Then run Explain Plan again on same query as before:
+
+![compass explain index](images/compass-explain-index.png "compass explain index")
+
+This time only 31 documents had to be examined to find 1 document, much better ratio than before. Query time much faster. Shows `last_name` index being used. 31 index keys examined - all index keys matched last_name `Frazier` but of those 31, only one matched first_name `Jasmine`.
+
+Visual tree shows 2 nodes of execution:
+- IXSCAN to find 31 docs matching last_name: Frazier
+- FETCH to find the 1 matching first_name: Jasmine
+
+Now create compound index to further improve performance - ORDER OF FIELDS MATTERS:
+
+![compass compound index](images/compass-compound-index.png "compass compound index")
+
+Run explain again - this time note compound index is used, and IXSCAN node returns just 1 doc instead of 31:
+
+![compass explain compound](images/compass-explain-compound.png "compass explain compound")
+
+So only 1 document examined to return 1 document - optimal ratio, best performance.
+
+Compound indexes can also be used to find range of values:
+
+![compass explain range](images/compass-explain-range.png "compass explain range")
+
+This time examined 16 docs, 16 index keys, to return 16 docs -> still optimal ratio 16/16 = 1.
+
+Reason we didn't have to examine any extra docs is because first_name field is also ordered in compound index.
