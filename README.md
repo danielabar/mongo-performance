@@ -1411,3 +1411,64 @@ Sort by projected score field to guarnatee most relevant results first:
 
 ### Lecture: Collations
 
+Specify language specific rules for string comparison, such as letter case and accents. Defined with options:
+
+```javascript
+{
+	locale: <string>, 		// determines ICU supported locale for collation
+	caseLevel: <boolean>, // remainder of options out of scope for this course
+	caseFirst: <string>,
+	strength: <int>,
+	numericOrdering: <boolean>,
+	alternate: <string>,
+	maxVariable: <string>,
+	backwards: <boolean>
+}
+```
+
+Collations can be defined at different levels:
+
+**Collection creation time**
+
+eg: all queries and indexes against this collection will use collation for `pt` locale:
+
+```javascript
+> db.createCollection("foreign_text", {collation: {locale: "pt"}})
+> db.foreign_text.insert({ "name": "Máximo", "text": "Bom dia minha gente!"})
+> db.foreign_text.find({_id: {$exists: 1}}).explain()
+... "collation" : {
+	"locale" : "pt",
+	...
+```
+
+Can specify a different collation on a given request or index creation. For index, will override default and collection level collations.
+
+```javascript
+> db.foreign_text.find({ _id: {$exists:1 } }).collation({locale: 'it'})
+> db.foreign_text.aggregate([ {$match: { _id: {$exists:1 }  }}], {collation: {locale: 'es'}})
+> db.foreign_text.createIndex( {name: 1},  {collation: {locale: 'it'}} )
+```
+
+In order for index to be used by a query, query must match collation of index.
+
+```javascript
+// uses the collection collation (Portuguese)
+db.foreign_text.find( {name: 'Máximo'}).explain()
+
+// uses the index collation (Italian)
+db.foreign_text.find( {name: 'Máximo'}).collation({locale: 'it'}).explain()
+```
+
+**Collation Properties**
+
+- Needed for correctness of text searching
+- Marginal performance impact
+- Case insensitive indexes
+
+Set `strength` to 1 for primary level of comparison (i.e. case insensitive index):
+
+```javascript
+db.createCollection( "no_sensitivity", {collation: {locale: 'en', strength: 1}})
+```
+
+In this case sorting by some text field where docs contain values like `aaa` and/or `AAA`, `aAa` etc, will sort the same ascending or descending.
