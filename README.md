@@ -21,6 +21,8 @@
     - [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
       - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
     - [Lecture: Multikey Indexes](#lecture-multikey-indexes)
+    - [Lecture: Partial Indexes](#lecture-partial-indexes)
+      - [Partial Index Restrictions](#partial-index-restrictions)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1192,3 +1194,110 @@ Still doing index scan,but this time, multikey is true, because `stock` is an ar
 },
 ```
 
+### Lecture: Partial Indexes
+
+May want to index only a portion of documents. Can reduce performance costs of creating and maintaining indexes.
+
+Eg: collection of restaurants:
+
+```javascript
+{
+	"_id": ObjectId("58a..."),
+	"name": "Han Dynasty",
+	"cuisine": "Sichuan",
+	"stars": 4.4,
+	"address": {
+		"street": "90 3rd Ave",
+		"city": "New York",
+		"state: "NY",
+		"zipcode": "10003"
+	}
+}
+```
+
+Suppose majority of queries are only for restaurants with > 3.5 stars. Create partial index - only index on city and cuisine if restarant has 3.5 stars are greater:
+
+```javascript
+db.restaurants.createIndex(
+	{"address.city": 1, cuisine: 1},
+	{partialFilterExpression: {"stars": {$gte: 3.5}}}
+)
+```
+
+This reduces number of index keys mongo needs to store - reduces memory requirement. Useful when index has grown too large to fit into memory.
+
+Partial indexes also useful with multikey indexes.
+
+Sparse indexes are special case of partial indexes. Sparse index only indexes doc where a index field exists in doc, eg:
+
+```javascript
+db.restaurants.createIndex(
+	{stars: 1},
+	{sparse: true}
+)
+```
+
+Partial index syntax for above would be:
+
+```javascript
+db.restaurants.createIndex(
+	{stars: 1},
+	{partialFilterExpression: {"stars": {$exists: true}}}
+)
+```
+
+Partial indexes are more expressive than sparse indexes - can define filter expression that checksk for existence of fields that are not index keys, eg:
+
+```javascript
+db.restaurants.createIndex(
+	{stars: 1},
+	{partialFilterExpression: {"cuisine": {$exists: true}}}
+)
+```
+
+**Exercise**
+
+From mongo shell:
+
+```shell
+> use m201
+> db.restaurants.insert({
+		"name" : "Han Dynasty",
+		"cuisine" : "Sichuan",
+		"stars" : 4.4,
+		"address" : {
+			"street" : "90 3rd Ave",
+			"city" : "New York",
+			"state" : "NY",
+			"zipcode": "10003"
+		}
+	});
+> db.restaurants.find({'address.city': 'New York', cuisine: 'Sichuan'})
+{ "_id" : ObjectId("5b55c4c0b13dbf68f04e12ab"), "name" : "Han Dynasty", "cuisine" : "Sichuan", "stars" : 4.4, "address" : { "street" : "90 3rd Ave", "city" : "New York", "state" : "NY", "zipcode" : "10003" } }
+> var exp = db.restaurants.explain()
+> exp.find({'address.city': 'New York', cuisine: 'Sichuan'})
+COLLSCAN...
+> db.restaurants.createIndex(
+	{"address.city": 1, cuisine: 1},
+	{partialFilterExpression: {"stars": {$gte: 3.5}}}
+)
+> exp.find({'address.city': 'New York', cuisine: 'Sichuan'})
+```
+
+After that last explain, would think partial index would be used but it's not, still doing COLLSCAN.
+
+To use partial index, query must be guaranteed to match subset of docs specified by filter expression. Otherwise server might miss results where matching docs not indexed.
+
+To make index used, need to include predicate that matches partial filter expression, stars in our example:
+
+```shell
+> exp.find({'address.city': 'New York', cuisine: 'Sichuan', stars: {$gt: 4.0}})
+```
+
+Now, IXSCAN is used.
+
+#### Partial Index Restrictions
+
+- Can't specify both `partialFilterExpression` and `sparse` options
+- _id indexes can't be partial (because every doc must have indexed _id field)
+- Shard key indexes can't be partial
