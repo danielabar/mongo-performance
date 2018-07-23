@@ -23,6 +23,8 @@
     - [Lecture: Multikey Indexes](#lecture-multikey-indexes)
     - [Lecture: Partial Indexes](#lecture-partial-indexes)
       - [Partial Index Restrictions](#partial-index-restrictions)
+    - [Lecture: Text Indexes](#lecture-text-indexes)
+    - [Lecture: Collations](#lecture-collations)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1301,3 +1303,111 @@ Now, IXSCAN is used.
 - Can't specify both `partialFilterExpression` and `sparse` options
 - _id indexes can't be partial (because every doc must have indexed _id field)
 - Shard key indexes can't be partial
+
+### Lecture: Text Indexes
+
+Often store text in docs, eg:
+
+```javascript
+{
+	_id: ObjectId("57b..."),
+	productName: "MongoDB Long Sleeve T-Shirt",
+	category: "Clothing"
+}
+```
+
+Useful to search for docs based on words that are part of text fields.
+
+This query would find the matching doc if you knew *exactly* what string to look for:
+
+```javascript
+db.products.find({productName: "MongoDB Long Sleeve T-Shirt"})
+```
+
+But users unlikely to know exact string to search for, could use regex - works but bad for performance even with index:
+
+```javascript
+db.products.find({productName: /T-Shirt/})
+```
+
+Solution is to create a text index - special kind of index:
+
+```javascript
+db.products.createIndex({productName: "text"})
+```
+
+Now can use full text search, avoids collection scan:
+
+```javascript
+db.products.find({$text: {$search: "t-shirt"}})
+```
+
+Text indexing similar to multikey index. Mongo processes each text field in document, eg "MongoDB Long Sleeve T-Shirt", creating index key for each unique word in string, eg:
+
+- mongodb
+- long
+- sleeve
+- t
+- shirt
+
+Note: unicode considers space and hyphens as text delimiters.
+
+By default, text indexes are case insensitive.
+
+Similar to multikey indexes, be aware that:
+- Text indexes may result in creation of many index keys, if documents have large text fields. This means query engine has more keys to examine
+- Increase in overall index size.
+- Increased time to build index compared to traditional index.
+- Decreased write performance compared to tranditional index.
+
+Strategy to minimize text index size is to use compound index, limits number of text keys that need to be examined by limiting on category when searching, eg:
+
+```javascript
+db.products.createIndex({category: 1, productName: "text})
+db.products.find({
+	category: "Clothing",
+	$text: {$search: "t-shirt"}
+})
+```
+
+**Exercise**
+
+From mongo shell, insert a few docs, then create text index:
+
+```shell
+> mongo m201
+> db.textExample.insertOne({"statement": "MongoDB is the best"})
+> db.textExample.insertOne({"statement": "MongoDB is the worst"})
+> db.textExample.createIndex({statement: "text"})
+> db.textExample.find({$text: {$search: "MongoDB best"}})
+```
+
+Text search returns two results:
+
+```shell
+{ "_id" : ObjectId("5b55cf70b13dbf68f04e12ac"), "statement" : "MongoDB is the best" }
+{ "_id" : ObjectId("5b55cf7fb13dbf68f04e12ad"), "statement" : "MongoDB is the worst" }
+```
+
+Why is `worst` showing up in results?
+
+Text queries logically `or` each delimited word. i.e. above example searched for any docs that include `MongoDB` OR `best`.
+
+Project `textScore` to return results. `$text` assigns a `score` to each document based on relevance of that doc to search:
+
+```javascript
+> db.textExample.find({$text: {$search: "MongoDB best"}}, {score: {$meta: "textScore"}})
+{ "_id" : ObjectId("5b55cf7fb13dbf68f04e12ad"), "statement" : "MongoDB is the worst", "score" : 0.75 }
+{ "_id" : ObjectId("5b55cf70b13dbf68f04e12ac"), "statement" : "MongoDB is the best", "score" : 1.5 }
+```
+
+Sort by projected score field to guarnatee most relevant results first:
+
+```javascript
+> db.textExample.find({$text: {$search: "MongoDB best"}}, {score: {$meta: "textScore"}}).sort({score: {$meta: "textScore"}})
+{ "_id" : ObjectId("5b55cf70b13dbf68f04e12ac"), "statement" : "MongoDB is the best", "score" : 1.5 }
+{ "_id" : ObjectId("5b55cf7fb13dbf68f04e12ad"), "statement" : "MongoDB is the worst", "score" : 0.75 }
+```
+
+### Lecture: Collations
+
