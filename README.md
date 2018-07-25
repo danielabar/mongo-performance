@@ -3,31 +3,31 @@
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [MongoDB Performance](#mongodb-performance)
-  - [Chapter 1: Introduction](#chapter-1-introduction)
-    - [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
-    - [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
-    - [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
-  - [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
-    - [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
-    - [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
-    - [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
-    - [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
-    - [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
-      - [Methods for sorting](#methods-for-sorting)
-      - [In-Memory Sorting](#in-memory-sorting)
-      - [Index Sorting](#index-sorting)
-    - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
-    - [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
-    - [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
-      - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
-    - [Lecture: Multikey Indexes](#lecture-multikey-indexes)
-    - [Lecture: Partial Indexes](#lecture-partial-indexes)
-      - [Partial Index Restrictions](#partial-index-restrictions)
-    - [Lecture: Text Indexes](#lecture-text-indexes)
-    - [Lecture: Collations](#lecture-collations)
-  - [Index Operations](#index-operations)
-    - [Lecture: Building Indexes](#lecture-building-indexes)
-  - [Lecture: Query Plans](#lecture-query-plans)
+	- [Chapter 1: Introduction](#chapter-1-introduction)
+		- [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
+		- [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
+		- [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
+	- [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
+		- [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
+		- [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
+		- [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
+		- [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
+		- [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
+			- [Methods for sorting](#methods-for-sorting)
+			- [In-Memory Sorting](#in-memory-sorting)
+			- [Index Sorting](#index-sorting)
+		- [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
+		- [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
+		- [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
+			- [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
+		- [Lecture: Multikey Indexes](#lecture-multikey-indexes)
+		- [Lecture: Partial Indexes](#lecture-partial-indexes)
+			- [Partial Index Restrictions](#partial-index-restrictions)
+		- [Lecture: Text Indexes](#lecture-text-indexes)
+		- [Lecture: Collations](#lecture-collations)
+	- [Index Operations](#index-operations)
+		- [Lecture: Building Indexes](#lecture-building-indexes)
+		- [Lecture: Query Plans](#lecture-query-plans)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1562,4 +1562,87 @@ Notice each operation has an `opid`, will need this if want to kill the operatio
 > db.killOp(12345)
 ```
 
-## Lecture: Query Plans
+### Lecture: Query Plans
+
+Eg: when query is requested:
+
+```javascript
+db.restaurants.find({
+	"address.zipcode": {$gt: '50000'},
+	cuisine: 'Sushi'
+}).sort({stars: -1})
+```
+
+Query plan is formed:
+
+![query plan](images/query-plan.png "query plan")
+
+Series of stages that feed into one another. In above example:
+
+If index exists `{"address.zipcode": 1, cuisine: 1}`
+
+1. IXSCAN: Record ids that meet query predicate will be read from index.
+2. FETCH: Record id's from IXSCAN passed into FETCH stage, this is where storage engine converts record ids to documents.
+3. SORT: Documents passed to SORT stage which will do in-memory sort.
+
+For any given query, could have many different query plans based on available indexes.
+
+If had this index, would prevent in-memory sort: `{cuisine: 1, stars: 1}` because record id's coming out of IXSCAN stage would already be sorted by `stars`.
+
+![query plan 2](images/query-plan-2.png "query plan 2")
+
+**How is query plan selected?**
+
+Given query hitting server for first time:
+
+```javascript
+db.restaurants.find({
+	"address.zipcode": {$gt: '50000'},
+	cuisine: 'Sushi'
+}).sort({stars: -1})
+```
+
+Server looks at all available indexes on collecion.
+
+```javascript
+{_id: 1}
+{name: 1, cuisine: 1, stars: 1}
+{"address.zipcode": 1, cuisine: 1}
+{"address.zipcode": 1, stars: 1}
+{Cuisine: 1, stars: 1}
+```
+
+Then determines of these, which are viable to satisfy query - i.e. *candidate indexes*:
+
+```javascript
+{"address.zipcode": 1, cuisine: 1}
+{"address.zipcode": 1, stars: 1}
+{Cuisine: 1, stars: 1}
+```
+
+Then for each candidate index, query optimizer geenrates *candidate plans*.
+
+![candidate plans](images/candidate-plans.png "candidate plans")
+
+MongoDB has *empirical query planner* - trial period where each candidate plan is executed over short period of time. Planner evaluates which performs the best:
+
+![best plan](images/best-plan.png "best plan")
+
+Best could mean:
+- which plan returns all results first
+- which plan returned certain number of docs in sort order fastest
+- other...
+
+When run `explain`, winning plan will show the best plan that was evaluated. Other plans will show up under rejected section.
+
+**Cache**
+
+Not efficient to run trial plans for every incoming query since lots of them have the same "shape".
+
+MongoDB caches which plan should be used for a given query shape.
+
+Over time, collection and indexes may change, therefore plan cache will evict the cache occasionally. Plans can be evicted when:
+- Server restarted.
+- Amount of work performed by first portion of query exceeds amount of work performed by winning plan by factor of 10.
+- Index rebuilt.
+- Index created or dropped.
