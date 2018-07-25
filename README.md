@@ -3,31 +3,32 @@
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [MongoDB Performance](#mongodb-performance)
-	- [Chapter 1: Introduction](#chapter-1-introduction)
-		- [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
-		- [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
-		- [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
-	- [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
-		- [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
-		- [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
-		- [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
-		- [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
-		- [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
-			- [Methods for sorting](#methods-for-sorting)
-			- [In-Memory Sorting](#in-memory-sorting)
-			- [Index Sorting](#index-sorting)
-		- [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
-		- [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
-		- [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
-			- [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
-		- [Lecture: Multikey Indexes](#lecture-multikey-indexes)
-		- [Lecture: Partial Indexes](#lecture-partial-indexes)
-			- [Partial Index Restrictions](#partial-index-restrictions)
-		- [Lecture: Text Indexes](#lecture-text-indexes)
-		- [Lecture: Collations](#lecture-collations)
-	- [Index Operations](#index-operations)
-		- [Lecture: Building Indexes](#lecture-building-indexes)
-		- [Lecture: Query Plans](#lecture-query-plans)
+  - [Chapter 1: Introduction](#chapter-1-introduction)
+    - [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
+    - [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
+    - [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
+  - [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
+    - [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
+    - [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
+    - [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
+    - [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
+    - [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
+      - [Methods for sorting](#methods-for-sorting)
+      - [In-Memory Sorting](#in-memory-sorting)
+      - [Index Sorting](#index-sorting)
+    - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
+    - [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
+    - [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
+      - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
+    - [Lecture: Multikey Indexes](#lecture-multikey-indexes)
+    - [Lecture: Partial Indexes](#lecture-partial-indexes)
+      - [Partial Index Restrictions](#partial-index-restrictions)
+    - [Lecture: Text Indexes](#lecture-text-indexes)
+    - [Lecture: Collations](#lecture-collations)
+  - [Index Operations](#index-operations)
+    - [Lecture: Building Indexes](#lecture-building-indexes)
+    - [Lecture: Query Plans](#lecture-query-plans)
+    - [Lecture: Understanding Explain Part 1](#lecture-understanding-explain-part-1)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1646,3 +1647,80 @@ Over time, collection and indexes may change, therefore plan cache will evict th
 - Amount of work performed by first portion of query exceeds amount of work performed by winning plan by factor of 10.
 - Index rebuilt.
 - Index created or dropped.
+
+### Lecture: Understanding Explain Part 1
+
+Explain can answer these questions:
+- Is query using expected index?
+- Is query using index to sort?
+- Is query using index to provide projection?
+- How selective is index?
+- Which part of plan is most expensive?
+
+To run explain, can append to end of query:
+
+```javascript
+db.people.find({"address.city": "Lake Meaganton"}).explain()
+```
+
+But recommended way is to create explainable object:
+
+```javascript
+exp = db.people.explain()
+```
+
+Then use explainable object to run query - more convienient can run multiple queries from same exp object:
+
+```javascript
+exp.find({"address.city": "Lake Meaganton"})
+exp.find({"address.city": "Lake Brenda"})
+```
+
+Shell will return what would happen, without actually executing query.
+
+Default argument (don't need to specify) - WiLL NOT execute query:
+
+```javascript
+exp = db.people.explain("queryPlanner")
+```
+
+Another argument (must specify) to get stats - WILL execute query:
+
+```javascript
+exp = db.people.explain("executionStats")
+```
+
+Most verbose - use when want to look at alternate plans that were considered by planner but rejected - WILL execute query:
+
+```javascript
+exp = db.people.explain("allPlansExecution")
+```
+
+**Exercise**
+
+```shell
+mongo
+> use m201
+> exp = db.people.explain()
+> expRun = db.people.explain("executionStats")
+> expRunVerbose = db.people.explain("allPlansExecution")
+> expRun.find({"last_name":"Johnson", "address.state":"New York"})
+# winning plan is COLLSCAN -> bad!
+> db.people.createIndex({last_name:1})
+# rerun same query
+> expRun.find({"last_name":"Johnson", "address.state":"New York"})
+# this time winning plan is IXSCAN, followed by FETCH
+```
+
+In `executionStatus`, queries that are run most frequently should have:
+- `totalDocsExamined` and `nReturned` to be close to same number.
+- `totalKeysExamined` and `nRetunred` to be close to same number.
+
+Continuin with exercise, create another index, then re-run same query as before:
+
+```shell
+> db.people.createIndex({"address.state": 1, last_name: 1})
+> expRun.find({"last_name":"Johnson", "address.state":"New York"})
+```
+
+Left at 3:45
