@@ -25,6 +25,9 @@
       - [Partial Index Restrictions](#partial-index-restrictions)
     - [Lecture: Text Indexes](#lecture-text-indexes)
     - [Lecture: Collations](#lecture-collations)
+  - [Index Operations](#index-operations)
+    - [Lecture: Building Indexes](#lecture-building-indexes)
+  - [Lecture: Query Plans](#lecture-query-plans)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1472,3 +1475,91 @@ db.createCollection( "no_sensitivity", {collation: {locale: 'en', strength: 1}})
 ```
 
 In this case sorting by some text field where docs contain values like `aaa` and/or `AAA`, `aAa` etc, will sort the same ascending or descending.
+
+## Index Operations
+
+### Lecture: Building Indexes
+
+![build index slide 1](images/build-index-slide-1.png "build index slide 1")
+
+Want minimal impact on app users in prod when creating an index.
+
+Index can be created in foreground or background.
+
+**Foreground**
+
+Very fast but blocks all incoming operations to database containing collection on which index is being built. i.e. this db not available for app reads/writes until index build is complete.
+
+![foreground index](images/foreground-index.png "foreground index")
+
+If must do in foreground, then set a maintenance window.
+
+**Background**
+
+Don't block operations but slower to build index. How much slower depends on number of reads/writes going on in the foreground, and whether index will fit entirely in memory.
+
+Still has some impact on query performance while index is being built.
+
+**Exercise**
+
+```shell
+$ mongoimport -d m201 -c restaurants --drop /data/configdb/restaurants.json
+2018-07-25T18:24:54.756+0000	connected to: localhost
+2018-07-25T18:24:54.758+0000	dropping: m201.restaurants
+2018-07-25T18:24:57.754+0000	[######..................] m201.restaurants	37.4MB/144MB (26.0%)
+2018-07-25T18:25:00.754+0000	[############............] m201.restaurants	75.4MB/144MB (52.5%)
+2018-07-25T18:25:03.755+0000	[##################......] m201.restaurants	114MB/144MB (79.0%)
+2018-07-25T18:25:06.097+0000	[########################] m201.restaurants	144MB/144MB (100.0%)
+2018-07-25T18:25:06.098+0000	imported 1000000 documents
+```
+
+Need to build a compound index to support:
+- sort by name
+- specify particular cuisine
+- specify range of zip codes
+
+Given 1M docs in collection, will take considerable amount of time to build index. Exactly how long depends on cardinality of fields and other operations going on at the same time.
+
+Requirements:
+- Add new compound index
+- Creating index will take some time
+- Don't wnat to schedule a maintenance window
+- Index will fit in RAM
+
+Create index in background, by default background is set to false so must set it explicitly otherwise:
+
+```shell
+$ mongo
+> use m201
+> db.restaurants.createIndex({"cuisine": 1, "name": 1, "address.zipcode": 1}, {"background": true})
+{
+	"createdCollectionAutomatically" : false,
+	"numIndexesBefore" : 1,
+	"numIndexesAfter" : 2,
+	"ok" : 1
+}
+```
+
+Background option can be used on standalone mongod, or primary or secondaries in replica set.
+
+Note even though index is being created in background, shell will block until command returns. To see status, open another shell and check for current operations, passing in a filter to limit results. This looks for commands that are creating indexes or inserting documents into an index:
+
+```shell
+> use m201
+> db.currentOp(
+	{
+		$or: [
+			{op: "command", "query.createIndexes": {$exists: true}},
+			{op: "insert", ns: /\.system\.indexes\b/}
+		]
+	}
+)
+```
+
+Notice each operation has an `opid`, will need this if want to kill the operation before it completes, eg:
+
+```shell
+> db.killOp(12345)
+```
+
+## Lecture: Query Plans
