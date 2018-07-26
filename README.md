@@ -29,6 +29,7 @@
     - [Lecture: Building Indexes](#lecture-building-indexes)
     - [Lecture: Query Plans](#lecture-query-plans)
     - [Lecture: Understanding Explain Part 1](#lecture-understanding-explain-part-1)
+    - [Lecture: Understanding Explain Part 2](#lecture-understanding-explain-part-2)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1718,9 +1719,64 @@ In `executionStatus`, queries that are run most frequently should have:
 
 Continuin with exercise, create another index, then re-run same query as before:
 
-```shell
+```javascript
 > db.people.createIndex({"address.state": 1, last_name: 1})
 > expRun.find({"last_name":"Johnson", "address.state":"New York"})
 ```
 
-Left at 3:45
+Now will also see `rejectedPlans` in explain output - showing other plans that were considered. This shows up because we now have multiple indexes for planner to evaluate.
+
+Evaluate sort:
+
+```javascript
+var res = db.people.find({"last_name":"Johnson", "address.state":"New York"}).sort({"birthday":1}).explain("executionStats")
+res.executionStats.executionStages
+```
+
+`inputStage` shows `SORT_KEY_GENERATOR`, which means in-memory sort is being used.
+
+Note also memory usage for in-memory sort:
+
+```javascript
+"memUsage" : 2894, 			// ~2.8K
+"memLimit" : 33554432,	// 32M
+"inputStage" : {
+	"stage" : "SORT_KEY_GENERATOR",
+	"nReturned" : 7,
+```
+
+Notice that memory limit is 23M -> if a sort ever requires more than 32M, then server will cancel the query.
+
+Above query returned 7 docs, determine avg size of doc, multiply. If that result > 32M sort limit, then sort will cancel
+
+### Lecture: Understanding Explain Part 2
+
+More complex example, running explain on sharded cluster, using `mlaunch` from `mtools` to setup sharded cluster:
+
+```shell
+$ mlaunch init --single --sharrded 2
+```
+
+Then enable sharding after cluster is running:
+
+```shell
+$ mongo
+> use m201
+> sh.enableSharding("m201")
+> sh.shardCollection("m201.people", {_id: 1})
+mongos> exit
+mongoimport -d m201 -c people people.json
+mongo
+mongos> use m201
+mongos> > db.people.getShardDistribution()
+```
+
+Now when query run on mongos, mongos itself doesn't do the work, it sends the query to each shard. Each shard evaluates query, selects plan, then results aggregated on mongos.
+
+```shell
+db.people.find({"last_name":"Johnson", "address.state":"New York"}).explain("executionStats")
+```
+
+Would expect same plan chosen on each shard. But each shard may choose a different plan, for eg if it has more or less data to process.
+
+Now last stage in plan is `"SHARD_MERGE"`.
