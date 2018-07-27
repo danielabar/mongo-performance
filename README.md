@@ -35,6 +35,8 @@
       - [Determine Index Size](#determine-index-size)
       - [Resource Allocation](#resource-allocation)
       - [Edge Cases](#edge-cases)
+    - [Lecture: Basic Benchmarking](#lecture-basic-benchmarking)
+      - [Benchmarking Conditions](#benchmarking-conditions)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1879,8 +1881,8 @@ Returns HUGE amount of data, to deal with it:
 > var stats = db.people.stats({indexDetails: true})
 > stats.indexDetails
 ```
-
 Returns index details for each index on collection.
+
 
 Look at `"cache"` entry:
 
@@ -1912,3 +1914,52 @@ Another exception is when have indexes on fields that grow monotonically - eg: c
 ![unbalanced index](images/unbalanced-index.png "unbalanced index")
 
 If only need to query on most recent data, then only need most recent right-hand portion in memory, not the whole thing because left side and upper right of it contains older data.
+
+### Lecture: Basic Benchmarking
+
+**Low Level Benchmarking**
+
+- File I/O performance
+- Scheduler performance
+- Memory allocation and transfer speed
+- Thread performance
+- Database server performance
+- Transaction isolation
+
+**Database Server Benchmarking**
+
+- Data set load
+- Writes per second
+- Reads per second
+- Balanced workloads
+- Read / Write ratio
+
+**Distributed Systems Benchmarking**
+
+Most relevant for Mongo.
+
+- Linearization
+- Serialization
+- Fault tolerance
+
+Tool: [jepsen.io](http://jepsen.io/)
+
+#### Benchmarking Conditions
+
+Most tooling was built for relational db's, not necessarily relevant to MongoDB.
+
+Specific tool for Mongo [POCDriver](https://github.com/johnlpage/POCDriver) but needs Java and Maven.
+
+Tooling may not capture app-specific use cases.
+
+- Hardware
+- Clients
+- Load
+
+**Benchmarking Anti-Patterns**
+
+- Database swap replace (comparing mongo to relational using exact same schema)
+- Using mongo shell for write and read requests (not reflective of typical app usage)
+- Using mongoimport to test write response
+- Local laptop to run tests (use a server)
+- Using default MongoDB parameters (use production settings - eg authentication, high availability)
