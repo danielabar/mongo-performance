@@ -31,6 +31,10 @@
     - [Lecture: Understanding Explain Part 1](#lecture-understanding-explain-part-1)
     - [Lecture: Understanding Explain Part 2](#lecture-understanding-explain-part-2)
     - [Lecture: Forcing indexes with hint()](#lecture-forcing-indexes-with-hint)
+    - [Lecture: Resource Allocation for Indexes](#lecture-resource-allocation-for-indexes)
+      - [Determine Index Size](#determine-index-size)
+      - [Resource Allocation](#resource-allocation)
+      - [Edge Cases](#edge-cases)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1809,3 +1813,102 @@ db.people.find({name: "john Doe", zipcode: {$gt: "6300"}}).hint("name_1_zipcode_
 **Use with caution!**
 
 Mongo's query optimizer generally picks the correct index. If it does pick not the best one, probably because there are too many different indexes on collection - better to review why there are so many indexes and consider if some are superfluous and could be removed.
+
+### Lecture: Resource Allocation for Indexes
+
+Indexes require physical resources.
+
+#### Determine Index Size
+
+Compass will display index size for each collection in a database. Selecting a particular collection will break down index size for each index on that collection.
+
+Can also get this info from shell: `db.stats()`.
+
+#### Resource Allocation
+
+Indexes need two computational resources:
+
+Disk to store index information. Not generally an issue because if not enough space on disk for index, wouldn't get created. After index created, disk space requirement is a function of dadta. Therefore you would run out of disk space for collections before encoutering issues with indexes. However, if operating with separate disks for indexes vs collection, do need to ensure disk allocated for indexes is large enough.
+
+Memory to operate with those data structures. This is most intensive resource utilization for index usage. Deployments should be sized to accomodate all indexes in RAM.
+
+If not enough space in RAM for index, lots of disk access will be required to traverse index.
+
+![not enough ram](images/not-enough-ram.png "not enough ram")
+
+Different pages from index on disk will be allocated to memory:
+
+![ram index 1](images/ram-index-1.png "ram index 1")
+
+As you traverse that space, will slide pages into positions that are no longer in memory, therefore need to allocate those to memory and flush out info to disk:
+
+![ram index 2](images/ram-index-2.png "ram index 2")
+
+If constantly traversing index -> lots of page in/out.
+
+To assess, first get server RAM, eg (from Docker container):
+
+```shell
+$ free -h
+              total        used        free      shared  buff/cache   available
+Mem:           2.0G        256M        259M        768K        1.4G        1.5G
+Swap:          1.0G          0B        1.0G
+```
+
+Shows 2G RAM available.
+
+Can specify WT cache size at mongo startup:
+
+```shell
+mongod --dbpath data --wiredTigerCacheSizeGB 1
+```
+
+Then even though mem on machine is 2G, amount allocated to Mongo will only be 1G.
+
+**What percentage of index is cached in memory?**
+
+From mongo shell, get collection stats, passing in flag to also include index details:
+
+```javascript
+> db.people.stats({indexDetails: true})
+```
+
+Returns HUGE amount of data, to deal with it:
+
+```javascript
+> var stats = db.people.stats({indexDetails: true})
+> stats.indexDetails
+```
+
+Returns index details for each index on collection.
+
+Look at `"cache"` entry:
+
+```javascript
+"cache" : {
+	"bytes currently in the cache" : 3568, 	// how much of index is in RAM
+	"bytes read into cache" : 1160,
+	...
+	"pages read into cache" : 3,						// use to determine hit and pass page ratios
+	"pages requested from the cache" : 2,		// use to determine hit and pass page ratios
+	...
+```
+
+`pages requested from the cache` means queries were run using the index and it was traversed, therefore mongo read pages from RAM.
+
+#### Edge Cases
+
+General rule is to always have enough memory to allocate indexes. Exceptions to this are:
+
+- Occasional reports (eg: BI tools, might need an index to support queries)
+- Right-end-side index increments
+
+If a BI report doesn't run very often, don't necessarily need entire index that supports it in memory.
+
+To mitigate this, don't run query against primaries in replica sets and do not create index on primary. Rather, use secondaries.
+
+Another exception is when have indexes on fields that grow monotonically - eg: counters, dates, incremental id's. Recall index is b-tree. Monotonically incrementing fields will cause index to become unbalanced on the right hand side -> grows with new data incoming.
+
+![unbalanced index](images/unbalanced-index.png "unbalanced index")
+
+If only need to query on most recent data, then only need most recent right-hand portion in memory, not the whole thing because left side and upper right of it contains older data.
