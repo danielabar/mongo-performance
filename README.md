@@ -30,6 +30,7 @@
     - [Lecture: Query Plans](#lecture-query-plans)
     - [Lecture: Understanding Explain Part 1](#lecture-understanding-explain-part-1)
     - [Lecture: Understanding Explain Part 2](#lecture-understanding-explain-part-2)
+    - [Lecture: Forcing indexes with hint()](#lecture-forcing-indexes-with-hint)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1780,3 +1781,31 @@ db.people.find({"last_name":"Johnson", "address.state":"New York"}).explain("exe
 Would expect same plan chosen on each shard. But each shard may choose a different plan, for eg if it has more or less data to process.
 
 Now last stage in plan is `"SHARD_MERGE"`.
+
+### Lecture: Forcing indexes with hint()
+
+Can force mongo to use a particular index by overriding mongo's default index selection with `hint()`.
+
+eg query:
+
+```javascript
+db.people.find({name: "john Doe", zipcode: {$gt: "6300"}})
+```
+
+Query optimizer may not always choose index we'd like, eg may use index `{name: 1, age: 1}` instead of `{name: 1, zipcode: 1}`.
+
+To force it to use index you want, append `hint` method to query, passing in "shape" of desired index:
+
+```javascript
+db.people.find({name: "john Doe", zipcode: {$gt: "6300"}}).hint({name: 1, zipcode: 1})
+```
+
+Can also pass index name to hint:
+
+```javascript
+db.people.find({name: "john Doe", zipcode: {$gt: "6300"}}).hint("name_1_zipcode_1)
+```
+
+**Use with caution!**
+
+Mongo's query optimizer generally picks the correct index. If it does pick not the best one, probably because there are too many different indexes on collection - better to review why there are so many indexes and consider if some are superfluous and could be removed.
