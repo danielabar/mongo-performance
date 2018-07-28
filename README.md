@@ -37,6 +37,8 @@
       - [Edge Cases](#edge-cases)
     - [Lecture: Basic Benchmarking](#lecture-basic-benchmarking)
       - [Benchmarking Conditions](#benchmarking-conditions)
+  - [Chapter 4: CRUD Optimization](#chapter-4-crud-optimization)
+    - [Optimizing CRUD Operations](#optimizing-crud-operations)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1963,3 +1965,109 @@ Tooling may not capture app-specific use cases.
 - Using mongoimport to test write response
 - Local laptop to run tests (use a server)
 - Using default MongoDB parameters (use production settings - eg authentication, high availability)
+
+## Chapter 4: CRUD Optimization
+
+### Optimizing CRUD Operations
+
+**Exercise**
+
+```javascript
+var exp = db.restaurants.explain("executionStats")
+exp.find({ "address.zipcode": { $gt: '50000' }, cuisine: 'Sushi' }).sort({ stars: -1 })
+```
+
+As expected with no index, `totalDocsExamined: 1000000`, `nReturned: 11611`.
+
+Now create a naive index and explain:
+
+```javascript
+db.restaurants.createIndex({"address.zipcode": 1,"cuisine": 1,"stars": 1})
+exp.find({ "address.zipcode": { $gt: '50000' }, cuisine: 'Sushi' }).sort({ stars: -1 })
+```
+
+Uses index, but not very selective (i.e. looking at many unnecessary index keys) and still doing in-memory sort.
+
+```javascript
+{
+	nReturned: 11611,
+	totalKeysExamined: 95988,
+	totalDocsExamined: 11611,
+}
+```
+
+Examining 80K more index keys than needed because first index key is `address.zipcode`, but query on zipcode doing range, which isn't very selective, as compared to equality condition.
+
+```javascript
+// see how many documents match 50000 for zipcode (10)
+db.restaurants.find({ "address.zipcode": '50000' }).count()
+
+// see how many documents match our range (about half)
+db.restaurants.find({ "address.zipcode": { $gt: '50000' } }).count()
+```
+
+Cuisine is more selective:
+
+```javascript
+// see how many documents match an equality condition on cuisine (~2%)
+db.restaurants.find({ cuisine: 'Sushi' }).count()
+```
+
+Knowing selective portiosn of query, re-order index to take advantage of that and re-run query:
+
+```javascript
+db.restaurants.createIndex({ "cuisine": 1, "address.zipcode": 1, "stars": 1 })
+exp.find({ "address.zipcode": { $gt: '50000' }, cuisine: 'Sushi' }).sort({ stars: -1 })
+```
+
+Notice way less index keys examined:
+
+```javascript
+"executionStats" : {
+	"nReturned" : 11611,
+	"totalKeysExamined" : 11611,
+	"totalDocsExamined" : 11611,
+```
+
+But still doing in-memory sort, even though index includes `stars` key. Recall can only use an index for both filtering and sorting if the keys in the query predicate are in an equality condition. Since `zipcode` is used in a range query, not able to use the existing index for sorting.
+
+But swapping stars and zipcode will prevent in-memory sort:
+
+```javascript
+// swap stars and zipcode to prevent an in-memory sort
+db.restaurants.createIndex({ "cuisine": 1, "stars": 1, "address.zipcode": 1 })
+
+// awesome, no more in-memory sort! (uses the equality, sort, range rule)
+exp.find({ "address.zipcode": { $gt: '50000' }, cuisine: 'Sushi' }).sort({ stars: -1 })
+```
+
+Now `winningPlan` is `IXSCAN` followed by `FETCH`. No more `SORT KEY GENERATOR`. Looking at a few more index keys but by doing sort with index, cuts down on execution time:
+
+```javascript
+executionStatus: {
+	nReturned: 11611,
+	toalKeysExamined: 11663,
+	totalDocsExamined: 11611
+}
+```
+
+**Equality, Sort, Range**
+
+Query:
+
+```javascript
+db.restaurants.find({ "address.zipcode": { $gt: '50000' }, cuisine: 'Sushi' }).sort({ stars: -1 })
+```
+
+Index for most performant execution:
+
+```javascript
+db.restaurants.createIndex({ "cuisine": 1, "stars": 1, "address.zipcode": 1 })
+```
+
+Index should be designed in following order:
+- Beginning of index should match on equality conditions in the query predicate, in above case `cuisine`,
+- Followed by sort conditions, `stars` in above example.
+- Lastly, range conditions, `address.zipcode` in above example.
+
+Above is rule of thumb, works most of the time.
