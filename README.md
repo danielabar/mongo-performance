@@ -39,6 +39,7 @@
       - [Benchmarking Conditions](#benchmarking-conditions)
   - [Chapter 4: CRUD Optimization](#chapter-4-crud-optimization)
     - [Optimizing CRUD Operations](#optimizing-crud-operations)
+    - [Lecture: Covered Queries](#lecture-covered-queries)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2071,3 +2072,52 @@ Index should be designed in following order:
 - Lastly, range conditions, `address.zipcode` in above example.
 
 Above is rule of thumb, works most of the time.
+
+### Lecture: Covered Queries
+
+- Very performant
+- Satisfied entirely by index keys
+- 0 documents need to be examined
+
+Querying only index is way faster than querying docs in collection because:
+- Index keys typically smaller than docs they catalog.
+- Index keys typically available in RAM.
+
+Given the following query:
+
+```javascript
+db.restaurants.find({name: { $gt: 'L' }, cuisine: 'Sushi', stars: { $gte: 4.0 } })
+```
+
+And index on the exact same fields that are in query predicate:
+
+```javascript
+db.restaurants.createIndex({name: 1, cuisine: 1, stars: 1})
+```
+
+Add projection to query such that only index fields are included:
+
+```javascript
+db.restaurants.find({name: { $gt: 'L' }, cuisine: 'Sushi', stars: { $gte: 4.0 } }, { _id: 0, name: 1, cuisine: 1, stars: 1 })
+```
+
+Then all data to be returned exists in keys of index. Mongo can match query conditions *AND* return results only using index.
+
+Creating above index and running query in shell, executionStats show `totalDocsExamined: 0`.
+
+Caveat, if run the same query but modify projection to omit fields that are not index (as opposed to explicitly asking for fields that are in index):
+
+```javascript
+db.restaurants.find({name: { $gt: 'L' }, cuisine: 'Sushi', stars: { $gte: 4.0 } }, { _id: 0, address: 0 })
+```
+
+executionStats shows `totalDocsExamined: 2870`, even though query is the same as before. Query planner does not know what other fields might be present, might have some docs with fields that are not covered by index, therefore it needs to examine the documents.
+
+Index covers a query only when both of the following are true:
+- All fields in the query are a part of the index.
+- All the fields returned in the result are in the same index -> generally, will have to filter out `_id`.
+
+**Query cannot be covered if...**
+- Any of the indexed fields are arrays.
+- Any of the indexed fields are embedded documents.
+- When run against a mongos if the index does not contain the shard key.
