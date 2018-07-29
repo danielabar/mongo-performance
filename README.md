@@ -41,6 +41,7 @@
     - [Optimizing CRUD Operations](#optimizing-crud-operations)
     - [Lecture: Covered Queries](#lecture-covered-queries)
     - [Lecture: Regex Performance](#lecture-regex-performance)
+    - [Lecture: Insert Performance](#lecture-insert-performance)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2144,3 +2145,47 @@ Above optimization only works when matching on beginning of string. Eg would not
 ```javascript
 db.users.find({username: /^.irby/})
 ```
+
+### Lecture: Insert Performance
+
+Recall downside of indexes is they must be kept up to date, which will slow down write performance (insert, update, delete).
+
+**Write Concern**
+
+When writing to MongoDB, can specify write concern -> level of acknowledgement requested from MongoDB for write operations:
+
+```javascript
+{w: <value>, j: <boolean>, wtimeout: <number>}
+```
+
+w: How many members of replica set will wait for write to be propagated to before this write is considered truly written. Can be value like `1` - only wait for primary, `2` - wait for two members to acknowledge write, etc. Can also specify `majority` - wait for majority of members to acknowledge.
+
+j: Whether or not should wait for on disk journal. When writes come in to db, primarily written to memory only. Periodically, info is flushed to on-disk journal.
+
+wtimeout: How long to wait in ms for write to be acknowledged before timing out.
+
+examples:
+
+```javascript
+{w: 1, j: false, wtimeout: 5000}
+{w: "majority", j: true}					// will take longer to be acknowledged than previous example
+```
+
+Note: Even if timeout occurs, does not necessarily mean write was aborted. Could timeout and write still occurs later.
+
+Bottom example will take longer to acknowledge than top example because:
+- top write concern only waits for one server to acknowledge write
+- top example not waiting for on-disk journal
+- bottom waits for majority of servers and on disk journal
+
+Benchmarking using POCDriver running on instructors iMac and connecting to an Atlas cluster (just for demonstration purposes, not true benchmarking running from personal machine):
+
+![index ovehead](images/index-overhead.png "index overhead")
+
+![write concern performance](images/write-concern-performance.png "write concern performance")
+
+Note: Journaling not much of an effect when requesting majority write concern, but does have greater effect when dealing with only primary.
+
+For `majority` - network latency becomes a factor because waiting on multiple servers.
+
+Also note even though each index added reduced write performance by ~6%, it can improve read performance by more than 10x.
