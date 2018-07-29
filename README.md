@@ -40,6 +40,7 @@
   - [Chapter 4: CRUD Optimization](#chapter-4-crud-optimization)
     - [Optimizing CRUD Operations](#optimizing-crud-operations)
     - [Lecture: Covered Queries](#lecture-covered-queries)
+    - [Lecture: Regex Performance](#lecture-regex-performance)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2121,3 +2122,25 @@ Index covers a query only when both of the following are true:
 - Any of the indexed fields are arrays.
 - Any of the indexed fields are embedded documents.
 - When run against a mongos if the index does not contain the shard key.
+
+### Lecture: Regex Performance
+
+Use this technique when want to search on text without overhead of creating text index.
+
+Regex bad for performance, eg this query `db.users.find({username: /kirby/})`, must examine every single doc in `users` collection, matching regex against `username` field.
+
+Performance can be improved by creating index: `db.users.createIndex({username: 1})`. Now only need to check regex against `username` index key instead of entire document.
+
+However, still need to look at every single key of index, defeats purpose of index. Recall index stored as B-tree to *reduce* search space to ordered subset of entire collection.
+
+To take advantage of index when using regex, add `^` at beginning of regex to indicate - only want to return docs where the following chars *start* at beginning of string. Then Mongo will ignore branches of B-tree that don't begin with the specified chars. Reduces numebr of index keys that need to be examined -> increase overall query performance.
+
+```javascript
+db.users.find({username: /^kirby/})
+```
+
+Above optimization only works when matching on beginning of string. Eg would not optimize with wildcard regex, because need to check every single index key, could exist username `airby`, `birby`, etc.
+
+```javascript
+db.users.find({username: /^.irby/})
+```
