@@ -44,6 +44,9 @@
     - [Lecture: Insert Performance](#lecture-insert-performance)
     - [Lecture: Data Type Implications](#lecture-data-type-implications)
       - [Index Structure](#index-structure)
+    - [Lecture: Aggregation Performance](#lecture-aggregation-performance)
+      - [Index Usage](#index-usage)
+      - [Memory Constraints](#memory-constraints)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2310,3 +2313,98 @@ Still the numeric types will come before the string types, but within string gro
 If populate documents where other docs in collection have multiple different data types for the same field, app needs to handle all those different scenarios. Makes code and tests more complex.
 
 Even though might be useful to do this, use with care!
+
+### Lecture: Aggregation Performance
+
+Two categories of aggregation queries:
+
+**Realtime processing**
+
+- Provide data for applications
+- Query performance is more important
+
+**Batch Processing**
+
+- Provide data for analytics (eg: jobs run on a periodic basis, results not expected until some min/hrs etc later)
+- Query performance is less important
+
+This module deals with realtime processing.
+
+#### Index Usage
+
+Want agg queries to use indexes as much as possible, but determining index usage is different.
+
+Agg queries form pipeline of agg operators that transform data into desired format:
+
+```javascript
+db.orders.aggregate([
+	{ $<operator> : <predicate>},
+	{ $<operator> : <predicate>},
+	...
+])
+```
+
+Some agg operators can use indexes and some cannot.
+
+Data moves through pipeline from first to last operator, once server encounters stage that cannot use index, all subsequent stages will no longer be able to use indexes.
+
+Query optimizer does best effort to detect when stage could be moved up to optimize index utilization.
+
+Add explain doc to agg method to understand if queries are being used:
+
+```javascript
+db.orders.aggregate([
+	{ $<operator> : <predicate>},
+	{ $<operator> : <predicate>},
+	...
+], {explain: true})
+```
+
+**Example**
+
+```javascript
+db.orders.createIndex({cust_id: 1})
+```
+
+`$match` operator is able to use index, especially at beginning of pipeline:
+
+```javascript
+db.orders.aggregate([
+	{ $match: {cust_id: "287"}},
+	...
+])
+```
+
+$sort stage can also use index, put it as close to front of agg pipeline as possible:
+
+```javascript
+db.orders.aggregate([
+	{ $match: {cust_id: "287"} },
+	{ $sort: {cust_id: 1} }
+	...
+])
+```
+
+If also using `$limit` - make sure its near sort and at front of pipeline. Then server can do `top-k` sort - only needs to allocate memory for final number of documents requested. Same approach can be used even when no indexes are involved. Best performance scenario when limit is used.
+
+```javascript
+db.orders.aggregate([
+	{ $match: {cust_id: "287"} },
+	{ $limit: 10 },
+	{ $sort: {total: 1} }
+	...
+])
+```
+
+#### Memory Constraints
+
+- Results are subject to 16MB document limit -> aggs output a single doc, which must be < 16MB. Note limit does not apply to docs as they flow through the pipeline, only to final doc result.
+- To mitigate doc limit, use `$limit` and `$project` to reduce resulting doc size.
+- 100MB of RAM max available per stage.
+- To mitigate stage limit, ensure largest stages are able to use indexes -> reduces memory requirements since indexe entries tend to be smaller than docs they reference. Also using indexes for sorting greatly reduces memory requirements.
+- If unable to get mem usage < 100MB, set `allowDiskUse` to have agg spill to disk rather than doing everything in-memory - but use as last resort because hard drive thousands times slower than memory! Tends to be used more in batch processing than real time.
+- Note `allowDiskUse` does not work with `$graphLookup`.
+
+```javascript
+db.orders.aggregate([...], {allowDiskUse: true})
+```
