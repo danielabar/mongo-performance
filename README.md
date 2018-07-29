@@ -42,6 +42,8 @@
     - [Lecture: Covered Queries](#lecture-covered-queries)
     - [Lecture: Regex Performance](#lecture-regex-performance)
     - [Lecture: Insert Performance](#lecture-insert-performance)
+    - [Lecture: Data Type Implications](#lecture-data-type-implications)
+      - [Index Structure](#index-structure)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2180,7 +2182,7 @@ Bottom example will take longer to acknowledge than top example because:
 
 Benchmarking using POCDriver running on instructors iMac and connecting to an Atlas cluster (just for demonstration purposes, not true benchmarking running from personal machine):
 
-![index ovehead](images/index-overhead.png "index overhead")
+![index overhead](images/index-overhead.png "index overhead")
 
 ![write concern performance](images/write-concern-performance.png "write concern performance")
 
@@ -2189,3 +2191,122 @@ Note: Journaling not much of an effect when requesting majority write concern, b
 For `majority` - network latency becomes a factor because waiting on multiple servers.
 
 Also note even though each index added reduced write performance by ~6%, it can improve read performance by more than 10x.
+
+### Lecture: Data Type Implications
+
+In document store db, data model can be very flexible. Different documents can have the same field contain different data types.
+
+```javascript
+db.shapes.insert({
+	type: "triangle",
+	side_length_type: "equiliateral",
+	base: 10,
+	height: 20
+})
+```
+
+Now insert slightly different document into same collection - note `base` field is no longer Integer 64, but now NumberDecimal, no `height` property, but added `side_length` property.
+
+```javascript
+db.shapes.insert({
+	type: "triangle",
+	side_length_type: "isosceles",
+	base: NumberDecimal("2.82"),
+	side_length: 2
+})
+```
+
+Here's another variation, all are accepted by Mongo:
+
+```javascript
+db.shapes.insert({ type: "square", base: 1 })
+db.shapes.insert({ type: "rectangle", base: 1, side: 10 })
+```
+
+**Implications for Query Matching**
+
+eg: `db.shapes.find({base: 2.82})`
+
+filter matching field with int or float point val is different than filter matching string or decimal type.
+
+Above find will return no results because there is no document in collection with 2.82 as floating point type, even though there is a NumberDecimal("2.82") in the collection.
+
+Searching for string val of floating point also won't return anything `db.shapes.find({base: "2.82"})`
+
+Expressing query with correct data type will find the matching doc: `db.shapes.find({base: NumberDecimal("2.82")})`.
+
+**Implications for Sorting**
+
+```javascript
+db.shapes.find({}, {base:1, _id:0}).sort({base:1})
+```
+
+Will compare across all data types for `base` in the `shapes` collection, which up until this point, have all been numeric types (int 64, numeric decimal)
+
+```javascript
+{base: 1},
+{base: NumberDecimal("2.82")},
+{base: 3},
+{base: 10},
+```
+
+Now insert a string type for `base`:
+
+```javascript
+db.shapes.insert( { type: "pyramid", apex: 10, base: "3"} )
+db.shapes.insert( { type: "pyramid", apex: 10, base: "14"} )
+```
+
+Sorting by `base` again, numeric types sort as before, string types sort at the bottom with `14` appearing before `3`:
+
+```javascript
+{base: 1},
+{base: NumberDecimal("2.82")},
+{base: 3},
+{base: 10},
+{base: "14"},
+{base: "3"},
+```
+
+i.e. Mongo groups documents by bson type, then compares for sorting within the groups. Ordering of groups is as follows:
+
+![sort types](images/sort-types.png "sort types")
+
+#### Index Structure
+
+Same ordering as discussed in sorting previously applies to index structure. Btree organized by data types within indexed field of documents:
+
+![btree types](images/btree-types.png "btree types")
+
+Makes it performant to traverse tree looking for specific data type - can go directly to that branch of the tree.
+
+However, this might not be what app expects, in previous example "14" and "3" were sorted by their string data type rather than numeric values.
+
+This can be solved by an index and collation with `numericOrdering`:
+
+```javascript
+db.shapes.createIndex({base: 1}, {collation: {locale: 'en', numericOrdering: true}})
+```
+
+Now run sort with applied collation:
+
+```javascript
+db.shapes.find({}, {base:1, _id:0}).collation({locale: 'en', numericOrdering: true}).sort({base:1})
+```
+
+Still the numeric types will come before the string types, but within string group, will be sorted numerically rather than string ordering:
+
+```javascript
+{base: 1},
+{base: NumberDecimal("2.82")},
+{base: 3},
+{base: 10},
+{base: "3"},
+{base: "14"},
+```
+
+**Application Implications**
+
+If populate documents where other docs in collection have multiple different data types for the same field, app needs to handle all those different scenarios. Makes code and tests more complex.
+
+Even though might be useful to do this, use with care!
