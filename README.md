@@ -47,6 +47,8 @@
     - [Lecture: Aggregation Performance](#lecture-aggregation-performance)
       - [Index Usage](#index-usage)
       - [Memory Constraints](#memory-constraints)
+  - [Performance on Clusters](#performance-on-clusters)
+    - [Lecture: Performance Considerations in Distributed Systems](#lecture-performance-considerations-in-distributed-systems)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2408,3 +2410,68 @@ db.orders.aggregate([
 ```javascript
 db.orders.aggregate([...], {allowDiskUse: true})
 ```
+
+## Performance on Clusters
+
+### Lecture: Performance Considerations in Distributed Systems
+
+Distributed systems in mongo include Replica Cluster or Shard Cluster (horizontal scalability of data).
+
+Considerations when more than one machine is involved:
+- Latency
+- Data is spread across different nodes (copies of data or different sets of data in different shards)
+- Read implications
+- Write implications
+
+**Use Replica Sets in Production!**
+
+Horizontal scaling solution:
+
+![replica set](images/replica-set.png "replica set")
+
+High availability is key to guarantee service not affected by system failures. In addition to high availability (if primary goes down, can still use secondary), other beneficts of replica set include:
+- offloading eventual consistency data to secondaries, freeing up primary for operational workload?
+- having workload configuration where indexes are on secondary nodes?
+
+**Shared cluster**
+
+![sharding cluster](images/sharding-cluster.png "sharding cluster")
+
+- Multiple mongos instances responsible for routing client application requests to designated nodes
+- Config servvers contain mapping of shard cluster - where data sits, and config of shard cluster
+- Shard nodes contain application data (databases, collections, indexes) - major workloads performed here
+- Shard nodes are also replica sets
+
+Consider before sharding:
+- Have we reached limits of vertical scaling?
+- Understand how your data grows and how your data is accessed
+- Works by definint key based ranges - shard key
+- Important to get a good shard key
+
+**Sources of Latency in a Shard Cluster**
+
+![shard latency](images/shard-latency.png "shard latency")
+
+- Client app talks to mongos's.
+- Mongos's establish communications with config server to retrieve config info about shard, and with shard nodes to get app-specific data.
+- Some latency also caused by replication mechanism within each shard node.
+
+**Architecture to minimize latency**
+
+- Co-locate mongos within same server as client application to minimize number of network hops to access shard nodes.
+- Ensure high bandwidth network connection between mongos and shard nodes.
+
+**Types of reads in shard cluster**
+
+- Scatter Gather: Ping all nodes of shard cluster for info corresponding to a given query.
+- Routed Queries: Ask a single shard node, or small amount of shard nodes for data requested by application.
+
+Will have different performance profiles:
+- Scatter Gather - pay the latency price for asking every single shard node for data
+- Routed Query - less latency because only talking to one or few shard nodes
+
+Routed Query is possible when using shard key in queries. If not using shard key, then forced to do Scatter Gather because mongo cannot determine which shard node has data needed to satisfy client query. when shard key is used, mongos knows exactly which shard(s) contain data relevant for this query.
+
+**Sorting in shard cluster**
+
+Left at 3:46 https://www.youtube.com/watch?time_continue=4&v=fLe41bWKmro
