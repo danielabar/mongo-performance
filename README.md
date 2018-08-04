@@ -50,6 +50,9 @@
   - [Performance on Clusters](#performance-on-clusters)
     - [Performance Considerations in Distributed Systems](#performance-considerations-in-distributed-systems)
     - [Increasing Write Performance with Sharding](#increasing-write-performance-with-sharding)
+    - [Reading from Secondaries](#reading-from-secondaries)
+      - [When Reading from a Secondary is a GOOD Idea](#when-reading-from-a-secondary-is-a-good-idea)
+      - [When Reading from a Secondary is a BAD Idea](#when-reading-from-a-secondary-is-a-bad-idea)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2622,3 +2625,69 @@ With unordered bulk write on sharded cluster, all operations can be executed in 
 ![bulk write parallel shard](images/bulk-write-parallel-shard.png "bulk write parallel shard")
 
 NOTE: Mongos must deserialize the multiple write operations to appropriate nodes.
+
+### Reading from Secondaries
+
+Can specify a read preference, by default, it's `primary` - all reads/writes go to primary server:
+
+```javascript
+db.people.find().readPref("primary")
+```
+
+![read pref primary](images/read-pref-primary.png "read pref primary")
+
+Other readPrefs are:
+
+```javascript
+db.people.find().readPref("primary")
+db.people.find().readPref("primaryPreferred")
+db.people.find().readPref("secondary") 						// relevant to performance
+db.people.find().readPref("secondaryPreferred")		// relevant to performance
+db.people.find().readPref("nearest")							// relevant to performance
+```
+
+If set `readPref("seoncdary")`, all reads routed to secondary:
+
+![read pref secondary](images/read-pref-secondary.png"read pref secondary")
+
+If set `readPref("seoncdaryPrefered")`, reads will try to go to secondary, but if none available, routed to primary:
+
+![read pref secondary preferred](images/read-pref-secondary-preferred.png "read pref secondary preferred")
+
+If set `readPref("nearest")`, will read from member that has lowest network latency:
+
+![read pref nearest](images/read-pref-nearest.png "read pref nearest")
+
+**Eventual Consistency**
+
+When reading from secondary, might be reading stale data! Because data is asynchronously replicated to secondaries as writes occur on primary.
+
+**Strong Consistency**
+
+All writes go to primary, so when reading from primary, guaranteed to be reading latest state of data.
+
+#### When Reading from a Secondary is a GOOD Idea
+
+**Offloading Work**
+
+![offloading work](images/offloading-work.png "offloading work")
+
+When running analytics/report against data. Tends to be resource intensive and long running. Don't want this running on primary becuase will slow down reads/writes from operational application. Assumption here is that batch report doesn't expect most up-to-date data anyways so some stale-ness is fine.
+
+**Local Reads**
+
+![local reads](images/local-reads.png "local reads")
+
+Good for geographically distributed replica sets. eg - have two app servers, one on west coast of US and one on east coast. Have one secondary on west coast and another on east coast.
+
+Use `nearest` in this case to reduce latency, IF clients are ok with reading stale data.
+
+#### When Reading from a Secondary is a BAD Idea
+
+- In general: Secondaries exist to provide high availability, not to increase performance. Sharding increases read/write capacity by distributing read/write operations across a gorup of machines - use this instead of trying to increase performance by reading secondary.
+- Providing extra capacity for reads: Misconception that if primary is overworked with writes, can offload some work by reading from secodary -> FALSE because as writes come in to primary, they're replicated to secondaries, so all members of replica set have roughly same amount of write traffic.
+- Reading from secondaries in shard cluster -> TERRIBLE! NEVER DO THIS.
+
+![shard read](images/shard-read.png "shard read")
+
+Reading from shard secondary may return incomplete or duplicate data due to in progress chunk migrations.
