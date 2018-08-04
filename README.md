@@ -3,52 +3,53 @@
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [MongoDB Performance](#mongodb-performance)
-	- [Chapter 1: Introduction](#chapter-1-introduction)
-		- [Lecture: Hardware Considerations and Configurations Part 1](#lecture-hardware-considerations-and-configurations-part-1)
-		- [Lecture: Hardware Considerations and Configurations Part 2](#lecture-hardware-considerations-and-configurations-part-2)
-		- [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
-	- [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
-		- [Lecture: Introduction to Indexes](#lecture-introduction-to-indexes)
-		- [Lecture: How Data is Stored on Disk](#lecture-how-data-is-stored-on-disk)
-		- [Lecture: Single Field Indexes Part 1](#lecture-single-field-indexes-part-1)
-		- [Lecture: Single Field Indexes Part 2](#lecture-single-field-indexes-part-2)
-		- [Lecture: Sorting with Indexes](#lecture-sorting-with-indexes)
-			- [Methods for sorting](#methods-for-sorting)
-			- [In-Memory Sorting](#in-memory-sorting)
-			- [Index Sorting](#index-sorting)
-		- [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
-		- [Lecture: Querying on Compound Indexes Part 2](#lecture-querying-on-compound-indexes-part-2)
-		- [Lecture: When you can sort with indexes](#lecture-when-you-can-sort-with-indexes)
-			- [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
-		- [Lecture: Multikey Indexes](#lecture-multikey-indexes)
-		- [Lecture: Partial Indexes](#lecture-partial-indexes)
-			- [Partial Index Restrictions](#partial-index-restrictions)
-		- [Lecture: Text Indexes](#lecture-text-indexes)
-		- [Lecture: Collations](#lecture-collations)
-	- [Index Operations](#index-operations)
-		- [Lecture: Building Indexes](#lecture-building-indexes)
-		- [Lecture: Query Plans](#lecture-query-plans)
-		- [Lecture: Understanding Explain Part 1](#lecture-understanding-explain-part-1)
-		- [Lecture: Understanding Explain Part 2](#lecture-understanding-explain-part-2)
-		- [Lecture: Forcing indexes with hint()](#lecture-forcing-indexes-with-hint)
-		- [Lecture: Resource Allocation for Indexes](#lecture-resource-allocation-for-indexes)
-			- [Determine Index Size](#determine-index-size)
-			- [Resource Allocation](#resource-allocation)
-			- [Edge Cases](#edge-cases)
-		- [Lecture: Basic Benchmarking](#lecture-basic-benchmarking)
-			- [Benchmarking Conditions](#benchmarking-conditions)
-	- [Chapter 4: CRUD Optimization](#chapter-4-crud-optimization)
-		- [Optimizing CRUD Operations](#optimizing-crud-operations)
-		- [Lecture: Covered Queries](#lecture-covered-queries)
-		- [Lecture: Regex Performance](#lecture-regex-performance)
-		- [Lecture: Insert Performance](#lecture-insert-performance)
-		- [Lecture: Data Type Implications](#lecture-data-type-implications)
-			- [Index Structure](#index-structure)
-		- [Lecture: Aggregation Performance](#lecture-aggregation-performance)
-			- [Index Usage](#index-usage)
-			- [Memory Constraints](#memory-constraints)
-	- [Performance on Clusters](#performance-on-clusters)
-		- [Lecture: Performance Considerations in Distributed Systems](#lecture-performance-considerations-in-distributed-systems)
+  - [Chapter 1: Introduction](#chapter-1-introduction)
+    - [Hardware Considerations and Configurations Part 1](#hardware-considerations-and-configurations-part-1)
+    - [Hardware Considerations and Configurations Part 2](#hardware-considerations-and-configurations-part-2)
+    - [Lab 1.1: Install Course Dependencies](#lab-11-install-course-dependencies)
+  - [Chapter 2: MongoDB Indexes](#chapter-2-mongodb-indexes)
+    - [Introduction to Indexes](#introduction-to-indexes)
+    - [How Data is Stored on Disk](#how-data-is-stored-on-disk)
+    - [Single Field Indexes Part 1](#single-field-indexes-part-1)
+    - [Single Field Indexes Part 2](#single-field-indexes-part-2)
+    - [Sorting with Indexes](#sorting-with-indexes)
+      - [Methods for sorting](#methods-for-sorting)
+      - [In-Memory Sorting](#in-memory-sorting)
+      - [Index Sorting](#index-sorting)
+    - [Lecture Querying on Compound Indexes Part 1](#lecture-querying-on-compound-indexes-part-1)
+    - [Querying on Compound Indexes Part 2](#querying-on-compound-indexes-part-2)
+    - [When you can sort with indexes](#when-you-can-sort-with-indexes)
+      - [Sort Direction with Multiple Fields](#sort-direction-with-multiple-fields)
+    - [Multikey Indexes](#multikey-indexes)
+    - [Partial Indexes](#partial-indexes)
+      - [Partial Index Restrictions](#partial-index-restrictions)
+    - [Text Indexes](#text-indexes)
+    - [Collations](#collations)
+  - [Index Operations](#index-operations)
+    - [Building Indexes](#building-indexes)
+    - [Query Plans](#query-plans)
+    - [Understanding Explain Part 1](#understanding-explain-part-1)
+    - [Understanding Explain Part 2](#understanding-explain-part-2)
+    - [Forcing indexes with hint()](#forcing-indexes-with-hint)
+    - [Resource Allocation for Indexes](#resource-allocation-for-indexes)
+      - [Determine Index Size](#determine-index-size)
+      - [Resource Allocation](#resource-allocation)
+      - [Edge Cases](#edge-cases)
+    - [Basic Benchmarking](#basic-benchmarking)
+      - [Benchmarking Conditions](#benchmarking-conditions)
+  - [Chapter 4: CRUD Optimization](#chapter-4-crud-optimization)
+    - [Optimizing CRUD Operations](#optimizing-crud-operations)
+    - [Covered Queries](#covered-queries)
+    - [Regex Performance](#regex-performance)
+    - [Insert Performance](#insert-performance)
+    - [Data Type Implications](#data-type-implications)
+      - [Index Structure](#index-structure)
+    - [Aggregation Performance](#aggregation-performance)
+      - [Index Usage](#index-usage)
+      - [Memory Constraints](#memory-constraints)
+  - [Performance on Clusters](#performance-on-clusters)
+    - [Performance Considerations in Distributed Systems](#performance-considerations-in-distributed-systems)
+    - [Increasing Write Performance with Sharding](#increasing-write-performance-with-sharding)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -58,7 +59,7 @@
 
 ## Chapter 1: Introduction
 
-### Lecture: Hardware Considerations and Configurations Part 1
+### Hardware Considerations and Configurations Part 1
 
 Out of scope: Full discussion of how to tune and size hardware for given deployment. But will cover the basics.
 
@@ -100,7 +101,7 @@ Operations requiring availability of CPU cycles:
 - Aggrgation Framework Operations
 - Map Reduce
 
-### Lecture: Hardware Considerations and Configurations Part 2
+### Hardware Considerations and Configurations Part 2
 
 Not all reads and writes are non blocking operations, such as writing constantly to same document (in-place update) requires each write to block all other writes on that document. eg: given a document
 
@@ -194,7 +195,7 @@ Also install [Compass](https://www.mongodb.com/download-center#compass)
 
 ## Chapter 2: MongoDB Indexes
 
-### Lecture: Introduction to Indexes
+### Introduction to Indexes
 
 Indexes trying to solve problem of slow queries.
 
@@ -244,7 +245,7 @@ Also if document is updated or removed, some of the indexes (aka b-trees) may ne
 
 Be careful when creating indexes - don't create unnecessarily because will affect insert/update/delete performance on that collection.
 
-### Lecture: How Data is Stored on Disk
+### How Data is Stored on Disk
 
 Databases persist data using the server's file system.
 
@@ -411,7 +412,7 @@ db.collection.insert({...}, {writeConcern: {w: 1, j: true}})
 
 Setting `j: true` will impact performance because mongo will wait until sync is done to disk before confirming the write has been acknowledged.
 
-### Lecture: Single Field Indexes Part 1
+### Single Field Indexes Part 1
 
 Simplest index, foundation for later more complex indexes. Index that captures keys on a single field.
 
@@ -667,7 +668,7 @@ db.examples.explain("executionStats").find({"subdoc.indexedField": "value"})
 
 NEVER index on field that points to a subdocument, `subdoc` field in above example, would have to query on entire subdocument to make use of index.
 
-### Lecture: Single Field Indexes Part 2
+### Single Field Indexes Part 2
 
 **Range**
 
@@ -732,7 +733,7 @@ exp.find({"ssn": {$in: ["001-29-9184", "177-45-0950", "265-67-9973"]}, last_name
 If query is querying by 2 or more fields where only one of those fields is indexed on (i.e. single key index), db will filter using index, and then look only at filtered docs to `FETCH` the ones that match the other predicates.
 Compound indexes can make this even more efficient (later in course).
 
-### Lecture: Sorting with Indexes
+### Sorting with Indexes
 
 Indexes can also be used to sort documents in query. Any query can also be sorted:
 
@@ -958,7 +959,7 @@ This time examined 16 docs, 16 index keys, to return 16 docs -> still optimal ra
 
 Reason we didn't have to examine any extra docs is because first_name field is also ordered in compound index.
 
-### Lecture: Querying on Compound Indexes Part 2
+### Querying on Compound Indexes Part 2
 
 **Index Prefixes**
 
@@ -1023,7 +1024,7 @@ Querying by job, first_name, last_name - will have to examine a lot more index k
 
 ![job first last](images/job-first-last.png "job first last")
 
-### Lecture: When you can sort with indexes
+### When you can sort with indexes
 
 Carrying on with people dataset and 4 key compound index (job, employer, last_name, first_name) from previous lecture.
 
@@ -1104,7 +1105,7 @@ But this would do collection scan followed by in-memory sort:
 exp.find().sort({job: -1, exployer: 1})
 ```
 
-### Lecture: Multikey Indexes
+### Multikey Indexes
 
 Arrays can be embedded in documents:
 
@@ -1220,7 +1221,7 @@ Still doing index scan,but this time, multikey is true, because `stock` is an ar
 },
 ```
 
-### Lecture: Partial Indexes
+### Partial Indexes
 
 May want to index only a portion of documents. Can reduce performance costs of creating and maintaining indexes.
 
@@ -1328,7 +1329,7 @@ Now, IXSCAN is used.
 - _id indexes can't be partial (because every doc must have indexed _id field)
 - Shard key indexes can't be partial
 
-### Lecture: Text Indexes
+### Text Indexes
 
 Often store text in docs, eg:
 
@@ -1433,7 +1434,7 @@ Sort by projected score field to guarnatee most relevant results first:
 { "_id" : ObjectId("5b55cf7fb13dbf68f04e12ad"), "statement" : "MongoDB is the worst", "score" : 0.75 }
 ```
 
-### Lecture: Collations
+### Collations
 
 Specify language specific rules for string comparison, such as letter case and accents. Defined with options:
 
@@ -1499,7 +1500,7 @@ In this case sorting by some text field where docs contain values like `aaa` and
 
 ## Index Operations
 
-### Lecture: Building Indexes
+### Building Indexes
 
 ![build index slide 1](images/build-index-slide-1.png "build index slide 1")
 
@@ -1583,7 +1584,7 @@ Notice each operation has an `opid`, will need this if want to kill the operatio
 > db.killOp(12345)
 ```
 
-### Lecture: Query Plans
+### Query Plans
 
 Eg: when query is requested:
 
@@ -1668,7 +1669,7 @@ Over time, collection and indexes may change, therefore plan cache will evict th
 - Index rebuilt.
 - Index created or dropped.
 
-### Lecture: Understanding Explain Part 1
+### Understanding Explain Part 1
 
 Explain can answer these questions:
 - Is query using expected index?
@@ -1768,7 +1769,7 @@ Notice that memory limit is 23M -> if a sort ever requires more than 32M, then s
 
 Above query returned 7 docs, determine avg size of doc, multiply. If that result > 32M sort limit, then sort will cancel
 
-### Lecture: Understanding Explain Part 2
+### Understanding Explain Part 2
 
 More complex example, running explain on sharded cluster, using `mlaunch` from `mtools` to setup sharded cluster:
 
@@ -1800,7 +1801,7 @@ Would expect same plan chosen on each shard. But each shard may choose a differe
 
 Now last stage in plan is `"SHARD_MERGE"`.
 
-### Lecture: Forcing indexes with hint()
+### Forcing indexes with hint()
 
 Can force mongo to use a particular index by overriding mongo's default index selection with `hint()`.
 
@@ -1828,7 +1829,7 @@ db.people.find({name: "john Doe", zipcode: {$gt: "6300"}}).hint("name_1_zipcode_
 
 Mongo's query optimizer generally picks the correct index. If it does pick not the best one, probably because there are too many different indexes on collection - better to review why there are so many indexes and consider if some are superfluous and could be removed.
 
-### Lecture: Resource Allocation for Indexes
+### Resource Allocation for Indexes
 
 Indexes require physical resources.
 
@@ -1927,7 +1928,7 @@ Another exception is when have indexes on fields that grow monotonically - eg: c
 
 If only need to query on most recent data, then only need most recent right-hand portion in memory, not the whole thing because left side and upper right of it contains older data.
 
-### Lecture: Basic Benchmarking
+### Basic Benchmarking
 
 **Low Level Benchmarking**
 
@@ -2082,7 +2083,7 @@ Index should be designed in following order:
 
 Above is rule of thumb, works most of the time.
 
-### Lecture: Covered Queries
+### Covered Queries
 
 - Very performant
 - Satisfied entirely by index keys
@@ -2131,7 +2132,7 @@ Index covers a query only when both of the following are true:
 - Any of the indexed fields are embedded documents.
 - When run against a mongos if the index does not contain the shard key.
 
-### Lecture: Regex Performance
+### Regex Performance
 
 Use this technique when want to search on text without overhead of creating text index.
 
@@ -2153,7 +2154,7 @@ Above optimization only works when matching on beginning of string. Eg would not
 db.users.find({username: /^.irby/})
 ```
 
-### Lecture: Insert Performance
+### Insert Performance
 
 Recall downside of indexes is they must be kept up to date, which will slow down write performance (insert, update, delete).
 
@@ -2197,7 +2198,7 @@ For `majority` - network latency becomes a factor because waiting on multiple se
 
 Also note even though each index added reduced write performance by ~6%, it can improve read performance by more than 10x.
 
-### Lecture: Data Type Implications
+### Data Type Implications
 
 In document store db, data model can be very flexible. Different documents can have the same field contain different data types.
 
@@ -2316,7 +2317,7 @@ If populate documents where other docs in collection have multiple different dat
 
 Even though might be useful to do this, use with care!
 
-### Lecture: Aggregation Performance
+### Aggregation Performance
 
 Two categories of aggregation queries:
 
@@ -2413,7 +2414,7 @@ db.orders.aggregate([...], {allowDiskUse: true})
 
 ## Performance on Clusters
 
-### Lecture: Performance Considerations in Distributed Systems
+### Performance Considerations in Distributed Systems
 
 Distributed systems in mongo include Replica Cluster or Shard Cluster (horizontal scalability of data).
 
@@ -2489,3 +2490,135 @@ Similar steps needed for limit and skip - local limit/skip performed on each sha
 When each shard has completed its local limit/skip, final merge of results is performed on primary shard, then results sent back to client app:
 
 ![primary shard lmit skip](images/primary-shard-limit-skip.png "primary shard limit skip")
+
+### Increasing Write Performance with Sharding
+
+May have too much data or throughput for single db to handle. Solution is *scaling*.
+
+![vertical vs  horizontal scaling](images/veritcal-vs-horizontal-scaling.png "vertical vs horizontal scaling")
+
+**Vertical**
+- Server has too few resources (CPU, RAM, I/O)
+- Fix by buying bigger faster machine with more cpu, ram and disk.
+- Limit to how much of these resources one physical machine can have.
+- Cost is not linear - buying machine that is 2x as fast, more mem, more desk is more than 2x as expensive, could be 4x or more.
+
+**Horizontal**
+- Increase total number of servers.
+- Split workload between many different machines.
+- When reach limit of current setup, add more machines.
+- Cost scale linearly with performance requirements because buying more of same machine.
+
+**Shard Cluster**
+
+![mongos shards](images/mongos-shards.png "mongos shards")
+
+- All reads/writes go via mongos, which must determine which shard to send reads/writes to:
+- Achieved with shard key, which defines how data partitioned across different machines.
+```javascript
+sh.shardCollection('m201.people', {last_name: 1})
+```
+- Shard key is index field or compound of index fields, must exist in every document in collection.
+- Important to have data *evently* distributed across shards, to evently distribute load across machines.
+
+**Shard Key**
+
+![shard key](images/shard-key.png "shard key")
+
+- Using shard key, data divided into small *chunks*.
+- Each chunk has inclsuive lower bound and exclusive upper bound.
+- Max chunk size is 64M - when chunk reaches close to this size, it gets split.
+- Multiple chunks exist on each cluster.
+
+More realistic image:
+
+![shard key real](images/shard-key-real.png "shard key real")
+
+To have write throughput scale linearly with shards, must consider:
+
+***Cardinality***
+
+- Number of distinct values for a given shard key.
+- The higher the better.
+- Determines max number of chunks that can exist in cluster.
+
+eg: Building an app that will only be used by those living in new york. If shared on `address.state`, would only have one chunk - all of new york would go in there, therefore would only have on shard, which defeats the purpose of sharding:
+
+![one shard key bad ](images/one-shard-key-bad.png "one shard key bad")
+
+If unable to use a shard key with high cardinality, can increase cardinality with a compound shard key. Eg, rather than range of values only on state, have range of values on combination of state and last name:
+
+```javascript
+sh.shardCollection('m201.people', {'address.state': 1, last_name: 1})
+```
+
+***Frequency***
+
+- Even distribution of each shard key value is good.
+- If some values come in more often than others (eg: common last name like "Brow"), won't have even amount of load across cluster, limiting its effectiveness.
+
+![frequency](images/frequency.png "frequency")
+
+HOT SHARD: If most people using this app have last name "Brown", throughput becomes constrained by shard containing those values (Shard A in above exmaple).
+
+JUMBO CHUNK: Chunks containing frequently occurring values will grow larger. Usually when chunk is close to its max, will be split. BUT if chunk is created where lower and upper bound are the same, this chunk is no longer eligible for splitting:
+
+![upper lower bound same](images/upper-lower-bound-same.png "upper lower bound same")
+
+Jumbo chunks reduce effectiveness of horizontal scaling because they cannot be moved between shards.
+
+Frequency issue is mitigated with good compound shard key, in this example:
+
+```javascript
+sh.shardCollection('m201.people', {'last_name': 1, _id: 1})
+```
+
+Keys at beginning of shard key should have high cardinality, compounding key helps to distribute the frequency of popular values.
+
+***Rate of Change***
+
+- Consider how shard key value changes over time.
+- Avoid monotonically (always increasing or always decreasing) increasing or decreasing values. eg - do not shard ObjectId because newer created ObjectId's are always higher in value than previously created values. This will make all writes go to last shard - i.e. shard which contains upper bound of max key:
+
+![rate of chnage](images/rate-of-change.png "rate of change")
+
+If shard key was monotonically decreasing, all writes would go to first shard - i.e. shard which contains lower bound of min key.
+
+NOTE: It's ok to have monotonically increasing value in compound shard key, as long as it's not in the first field, as per this example. Having monotonically increasing value as second key in compound shard key is good -> increases total cardinality since its guaranteed to be unique.
+
+```javascript
+sh.shardCollection('m201.people', {'last_name': 1, _id: 1})
+```
+
+**Bulk Writes to Shard Cluster**
+
+Must specify if writes should be ordered or unordered:
+
+```javascript
+db.collection.bulkWrite(
+	[
+		<operation 1>,
+		<operation 2>,
+		...
+	],
+	{ordered: <boolean>}
+)
+```
+
+When `{ordered: true}`, server executes each operation in sequence, waiting for previous operation to succeed before executing next. If any operation fails, process halts and error reported to client:
+
+![bulk write ordered](images/bulk-write-ordered.png "bulk write ordered")
+
+When `{ordered: false}`, server can execute all operations in parallel:
+
+![bulk write parallel](images/bulk-write-parallel.png "bulk write parallel")
+
+With sharded cluster, ordered bulk writes are performance issue -> have to wait for last operation to complete before next can be executed. With replica set, this won't be so bad because all on one machine. But in sharded cluster, each shard on separate machine so have more latency waiting for each write to succeed:
+
+![replica vs shard bulk write ordered](images/replica-vs-shard-bulk-write-ordered.png "replica vs shard bulk write ordered")
+
+With unordered bulk write on sharded cluster, all operations can be executed in parallel, getting more benefit of distributed nature of shard cluster:
+
+![bulk write parallel shard](images/bulk-write-parallel-shard.png "bulk write parallel shard")
+
+NOTE: Mongos must deserialize the multiple write operations to appropriate nodes.
