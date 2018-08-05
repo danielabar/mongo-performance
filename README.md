@@ -53,6 +53,8 @@
     - [Reading from Secondaries](#reading-from-secondaries)
       - [When Reading from a Secondary is a GOOD Idea](#when-reading-from-a-secondary-is-a-good-idea)
       - [When Reading from a Secondary is a BAD Idea](#when-reading-from-a-secondary-is-a-bad-idea)
+    - [Aggregation Pipeline on a Sharded Cluster](#aggregation-pipeline-on-a-sharded-cluster)
+      - [Aggregation Optimizations](#aggregation-optimizations)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -2691,3 +2693,138 @@ Use `nearest` in this case to reduce latency, IF clients are ok with reading sta
 ![shard read](images/shard-read.png "shard read")
 
 Reading from shard secondary may return incomplete or duplicate data due to in progress chunk migrations.
+
+### Aggregation Pipeline on a Sharded Cluster
+
+Consider an example where collection is sharded on state, and aggregation is grouping by state:
+
+![agg shard group](images/agg-shard-group.png "agg shard group")
+
+This is relatively easy because all matched restaurants will be located in the same shard. So mongos can route the aggregation query to this shard, shard can compute entire agg, and return results to mongos.
+
+A more complex example - where results will be located across multiple shards:
+
+![agg shard complex](images/agg-shard-complex.png "agg shard complex")
+
+In this case, each shard will have to do some computing, then all the individual shard results need to be sent to one place where they can be *merged* together.
+
+Pipeline needs to be split, mongo determines which stages need to be executed on each shard, and which stages need to be executed on a single shard to merge results.
+
+Generally merging occurs on a *random* shard, except for the following stages that must be merged on the *primary* shard:
+
+- `$out`
+- `$facet`
+- `$lookup`
+- `$graphLookup`
+
+**Performance Implication**
+
+If running above operations frequently that require merging on primary shard, that shard will receive more load than the others, reducing benefits of horizontal scaling. Mitigate this by using better machine (more ram, faster cpu etc) for primary shard.
+
+#### Aggregation Optimizations
+
+Server will attempt to optimize aggs automatically, whether sharding or not.
+
+**Match before Sort**
+
+Move match ahead of sort to reduce number of documents that need to be sorted. Particularly useful with sharding because it reduces amoutn of data that need to be transferred across the wire for merging the results to be sorted.
+
+This:
+
+```javascript
+db.restaurants.aggregate([
+	{ $sort: {stars: -1}},
+	{ $match: {cuisine: 'Sushi'}}
+])
+```
+
+Will be rewritten to:
+
+```javascript
+db.restaurants.aggregate([
+	{ $match: {cuisine: 'Sushi'}},
+	{ $sort: {stars: -1}}
+])
+```
+
+**Limit before skip**
+
+Similar to above, to reduce number of documents that need to be examined:
+
+This:
+
+```javascript
+db.restaurants.aggregate([
+	{$skip: 10},
+	{$limit: 5},
+])
+```
+
+Will be rewritten to: (note: values updated)
+
+```javascript
+db.restaurants.aggregate([
+	{$limit: 15},
+	{$skip: 10}
+])
+```
+
+**Combine multiple stages**
+
+`$limit`, `$skip` and `$match` can be combined:
+
+This:
+
+```javascript
+db.restaurants.aggregate([
+	{$limit: 10},
+	{$limit: 5}
+])
+```
+
+Will be rewritten to:
+
+```javascript
+db.restaurants.aggregate([
+	{$limit: 5}
+])
+```
+
+This:
+
+```javascript
+db.restaurants.aggregate([
+	{$skip: 10},
+	{$skip: 5}
+])
+```
+
+Will be rewritten to:
+
+```javascript
+db.restaurants.aggregate([
+	{$skip: 15}
+])
+```
+
+This:
+
+```javascript
+db.restaurants.aggregate([
+	{$match: { cuisine: 'Sushi' }},
+	{$match: { stars: 5.0 }}
+])
+```
+
+Will be rewritten to:
+
+```javascript
+db.restaurants.aggregate([
+	{
+		$match: {
+			cuisine: 'Sushi',
+			stars: 5.0
+		}
+	},
+])
+```
